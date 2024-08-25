@@ -1,5 +1,7 @@
+from pathlib import Path
 import jax.numpy as jnp
 import optax
+import fire
 from tqdm import tqdm
 
 from dataset import NumpyLoader, get_dataset
@@ -8,7 +10,7 @@ from jax import value_and_grad, jit
 from jax.random import PRNGKey
 from model import initialize_model
 from typing import List, Tuple
-from utils import count_parameters, normalise_images, reshape_images
+from utils import count_parameters, normalise_images, reshape_images, save_model_parameters
 
 BATCH_SIZE = 128
 NUM_TIMESTEPS = 1000
@@ -84,7 +86,7 @@ def execute_train_loop(
     params: List[List[jnp.ndarray]],
     optimiser: optax._src.base.GradientTransformationExtraArgs,
     buffers,
-    epochs: int = 10,
+    epochs,
 ) -> List[List[jnp.ndarray]]:
     global ALPHAS
     ALPHAS = calculate_alphas(train_generator, NUM_TIMESTEPS)
@@ -98,7 +100,10 @@ def execute_train_loop(
         print(f"Validation loss: {val_loss * 1e3:.3f} * 10e-3")
     return params
 
-def main():
+def main(expdir: str = None, epochs: int = 10):
+    if expdir is None:
+        raise ValueError("Please provide an experiment directory.")
+    expdir = Path(expdir)
     global MODEL
     train_generator, val_generator = get_dataset(BATCH_SIZE)
     MODEL, parameters = initialize_model(PRNGKey(0))
@@ -110,7 +115,9 @@ def main():
         parameters, 
         optimiser, 
         buffers,
+        epochs,
     )
+    save_model_parameters(parameters, expdir / "model_parameters.pkl")
 
 if __name__ == "__main__":
-    main()
+    fire.Fire(main)

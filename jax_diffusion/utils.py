@@ -1,5 +1,7 @@
-import numpy as np
+from pathlib import Path
+import flax.serialization
 import jax.numpy as jnp
+import numpy as np
 
 IMAGE_NORMALISATION = 255.0
 
@@ -20,3 +22,18 @@ def count_parameters(variables):
         return total
 
     return count_params_recursive(variables['params'])
+
+def save_model_parameters(parameters, file_path: Path):
+    param_bytes = flax.serialization.to_bytes(parameters)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_bytes(param_bytes)
+    print(f"Saved model parameters to {file_path}")
+
+def load_model_parameters(file_path: Path):
+    if not file_path.exists():
+        raise FileNotFoundError(f"No parameter file found at {file_path}")
+    
+    param_bytes = file_path.read_bytes()
+    parameters = flax.serialization.from_bytes(None, param_bytes)
+    print(f"Loaded model parameters from {file_path}")
+    return parameters
