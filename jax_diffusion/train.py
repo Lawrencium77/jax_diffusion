@@ -8,7 +8,7 @@ from jax import value_and_grad, jit
 from jax.random import PRNGKey
 from model import initialize_model
 from typing import List, Tuple
-from utils import normalise_images, reshape_images
+from utils import count_parameters, normalise_images, reshape_images
 
 BATCH_SIZE = 128
 NUM_TIMESTEPS = 1000
@@ -101,6 +101,7 @@ def main():
     global MODEL
     train_generator, val_generator = get_dataset(BATCH_SIZE)
     MODEL, parameters = initialize_model(PRNGKey(0))
+    print(f"Initialised model with {count_parameters(parameters) / 10 ** 6:.1f} M parameters.")
     optimiser, buffers = get_optimiser(parameters)
     parameters = execute_train_loop(
         train_generator, 
