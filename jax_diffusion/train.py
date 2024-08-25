@@ -27,17 +27,16 @@ def one_hot(labels: jnp.ndarray) -> jnp.ndarray:
     """
     return jnp.eye(10)[labels]
 
-def ce_loss(
+def get_loss(
     params: jnp.ndarray, 
     images: jnp.ndarray, 
     labels: jnp.ndarray,
 ) -> jnp.ndarray:
     """
-    Cross-entropy loss.
+    MSE loss.
     """
     y_pred = forward_pass(params, images)  
-    y_pred = jnp.clip(y_pred, EPSILON, 1.0 - EPSILON)  # Avoid log(0)
-    losses = -1 * jnp.sum(labels * jnp.log(y_pred), axis=-1)  
+    losses = jnp.square(y_pred - labels) 
     return jnp.mean(losses) 
 
 @jit
@@ -49,7 +48,7 @@ def get_grads_and_loss(
     """
     Forward pass, backward pass, loss calculation.
     """
-    return value_and_grad(ce_loss)(params, images, labels)
+    return value_and_grad(get_loss)(params, images, labels)
 
 def train_step(
     images: jnp.ndarray, 
@@ -68,7 +67,7 @@ def train_step(
 def get_single_val_loss(images, labels, params):
     images = normalise_images(images)
     one_hot_labels = one_hot(labels)
-    loss = ce_loss(params, images, one_hot_labels)
+    loss = get_loss(params, images, one_hot_labels)
     return loss
 
 def validate(
