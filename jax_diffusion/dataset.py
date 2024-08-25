@@ -1,14 +1,10 @@
-"""
-Use PyTorch Dataloader to load MNIST dataset.
-Taken from https://jax.readthedocs.io/en/latest/notebooks/Neural_Network_and_Data_Loading.html#data-loading-with-pytorch
-"""
 from typing import Tuple
-
 import numpy as np
 import jax.numpy as jnp
 from jax.tree_util import tree_map
 from torch.utils import data
 from torchvision.datasets import MNIST
+from torch.utils.data import random_split
 
 def numpy_collate(batch):
   return tree_map(np.asarray, data.default_collate(batch))
@@ -35,7 +31,17 @@ class FlattenAndCast(object):
   def __call__(self, pic):
     return np.ravel(np.array(pic, dtype=jnp.float32))
   
-def get_dataset(batch_size: int) -> Tuple[MNIST, NumpyLoader]:
+def get_dataset(
+    batch_size: int, 
+    val_split: float = 0.2,
+) -> Tuple[MNIST, NumpyLoader, NumpyLoader]:
     mnist_dataset = MNIST('/tmp/mnist/', download=True, transform=FlattenAndCast())
-    training_generator = NumpyLoader(mnist_dataset, batch_size=batch_size, num_workers=0)
-    return mnist_dataset, training_generator
+    
+    val_size = int(len(mnist_dataset) * val_split)
+    train_size = len(mnist_dataset) - val_size
+
+    train_dataset, val_dataset = random_split(mnist_dataset, [train_size, val_size])
+
+    train_loader = NumpyLoader(train_dataset, batch_size=batch_size, num_workers=0, shuffle=True)
+    val_loader = NumpyLoader(val_dataset, batch_size=batch_size, num_workers=0, shuffle=False)
+    return mnist_dataset, train_loader, val_loader
