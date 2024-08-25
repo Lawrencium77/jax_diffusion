@@ -25,27 +25,32 @@ class DownBlock(nn.Module):
     @nn.compact
     def __call__(self, x):
         conv = ConvBlock(self.out_channels)(x)
-        pooled = nn.max_pool(conv, window_shape=(2, 2), strides=(2, 2), padding="VALID")
+        pooled = nn.max_pool(conv, window_shape=(2, 2), strides=(2, 2), padding="SAME")
         return conv, pooled
 
 
 class UpBlock(nn.Module):
     out_channels: int
 
+    @staticmethod
+    def center_crop(tensor, target_shape):
+        """
+        Crop the center of the tensor to the target_shape.
+        """
+        diff_height = tensor.shape[1] - target_shape[1]
+        diff_width = tensor.shape[2] - target_shape[2]
+        crop_h = diff_height // 2
+        crop_w = diff_width // 2
+        return tensor[:, crop_h:crop_h + target_shape[1], crop_w:crop_w + target_shape[2], :]
+    
     @nn.compact
     def __call__(self, x, skip):
+        """
+        Note that we crop the upsampled tensor, not the skip tensor.
+        """
         upsampled = nn.ConvTranspose(features=self.out_channels, kernel_size=(2, 2), strides=(2, 2))(x)
-        
-        def center_crop(tensor, target_shape):
-            """Crop the center of the tensor to the target_shape."""
-            diff_height = tensor.shape[1] - target_shape[1]
-            diff_width = tensor.shape[2] - target_shape[2]
-            crop_h = diff_height // 2
-            crop_w = diff_width // 2
-            return tensor[:, crop_h:crop_h + target_shape[1], crop_w:crop_w + target_shape[2], :]
-
         if skip.shape[1:3] != upsampled.shape[1:3]:
-            skip = center_crop(skip, upsampled.shape)
+            upsampled = self.center_crop(upsampled, skip.shape)
         
         concatenated = jnp.concatenate([upsampled, skip], axis=-1)
         return ConvBlock(self.out_channels)(concatenated)
