@@ -1,5 +1,5 @@
 """
-Modified Implementation of U-Net model to ensure output shape matches input shape
+U-Net implementation. See https://arxiv.org/abs/1505.04597.
 """
 
 import jax.numpy as jnp

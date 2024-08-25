@@ -61,6 +61,7 @@ def train_step(
 @jit
 def get_single_val_loss(images, params):
     images = normalise_images(images)
+    images = reshape_images(images)
     latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
     loss = get_loss(params, latents, noise_values, timesteps)
     return loss
