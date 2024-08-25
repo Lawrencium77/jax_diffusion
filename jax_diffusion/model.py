@@ -84,7 +84,7 @@ def initialize_model(key, input_shape=(1, 28, 28, 1), num_classes=1):
 if __name__ == "__main__":
     key = PRNGKey(0)
     model, variables = initialize_model(key)
-    x = jnp.ones((1, 28, 28, 1))  
+    x = jnp.ones((128, 28, 28, 1))  
     preds = model.apply(variables, x)
     print("Input shape:", x.shape)
     print("Output shape:", preds.shape)
