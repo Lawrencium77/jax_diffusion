@@ -1,17 +1,18 @@
+from pathlib import Path
 import jax.numpy as jnp
-import numpy as np
 import optax
+import fire
 from tqdm import tqdm
 
 from dataset import NumpyLoader, get_dataset
 from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
-from model import init_all_parameters, forward_pass
+from jax.random import PRNGKey
+from model import initialize_model
 from typing import List, Tuple
-from utils import normalise_images
+from utils import count_parameters, normalise_images, reshape_images, save_model_parameters
 
 BATCH_SIZE = 128
-SIZES = [784, 784, 784]
 NUM_TIMESTEPS = 1000
 
 def get_optimiser(params, learning_rate=0.0001):
@@ -23,14 +24,14 @@ def get_loss(
     params: jnp.ndarray, 
     latents: jnp.ndarray, 
     noise_values: jnp.ndarray,
-    timesteps: jnp.ndarray,
+    timesteps: jnp.ndarray,  # TODO: modify network to use timestep info.
 ) -> jnp.ndarray:
     """
     MSE loss.
     """
-    y_pred = forward_pass(params, latents, timesteps)  
-    losses = jnp.square(y_pred - noise_values) 
-    return jnp.mean(losses) 
+    y_pred = MODEL.apply(params, latents)  # Use model.apply instead of passing model
+    losses = jnp.square(y_pred - noise_values)
+    return jnp.mean(losses)
 
 @jit
 def get_grads_and_loss(
@@ -38,11 +39,13 @@ def get_grads_and_loss(
     latents: jnp.ndarray, 
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
-) -> jnp.ndarray:
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     Forward pass, backward pass, loss calculation.
     """
-    return value_and_grad(get_loss)(params, latents, noise_values, timesteps)
+    loss_fn = lambda p: get_loss(p, latents, noise_values, timesteps)
+    loss, grads = value_and_grad(loss_fn)(params) 
+    return loss, grads
 
 def train_step(
     images: jnp.ndarray, 
@@ -51,14 +54,16 @@ def train_step(
     buffers,
 ) -> Tuple[List[List[jnp.ndarray]], jnp.ndarray, jnp.ndarray]:
     latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
-    loss, grads = get_grads_and_loss(params, latents, noise_values, timesteps)
+    loss, grads = get_grads_and_loss(params, latents, noise_values, timesteps)  
     updates, buffers = optimiser.update(grads, buffers, params)
     new_params = optax.apply_updates(params, updates)
     return new_params, buffers, loss
 
+
 @jit
 def get_single_val_loss(images, params):
     images = normalise_images(images)
+    images = reshape_images(images)
     latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
     loss = get_loss(params, latents, noise_values, timesteps)
     return loss
@@ -81,7 +86,7 @@ def execute_train_loop(
     params: List[List[jnp.ndarray]],
     optimiser: optax._src.base.GradientTransformationExtraArgs,
     buffers,
-    epochs: int = 10,
+    epochs,
 ) -> List[List[jnp.ndarray]]:
     global ALPHAS
     ALPHAS = calculate_alphas(train_generator, NUM_TIMESTEPS)
@@ -89,14 +94,20 @@ def execute_train_loop(
         print(f">>>>> Epoch {epoch} <<<<<")
         for images, _ in tqdm(train_generator): 
             images = normalise_images(images)
+            images = reshape_images(images)
             params, buffers, _ = train_step(images, params, optimiser, buffers)
         val_loss = validate(val_generator, params)
         print(f"Validation loss: {val_loss * 1e3:.3f} * 10e-3")
     return params
 
-def main():
+def main(expdir: str = None, epochs: int = 10):
+    if expdir is None:
+        raise ValueError("Please provide an experiment directory.")
+    expdir = Path(expdir)
+    global MODEL
     train_generator, val_generator = get_dataset(BATCH_SIZE)
-    parameters = init_all_parameters(SIZES)
+    MODEL, parameters = initialize_model(PRNGKey(0))
+    print(f"Initialised model with {count_parameters(parameters) / 10 ** 6:.1f} M parameters.")
     optimiser, buffers = get_optimiser(parameters)
     parameters = execute_train_loop(
         train_generator, 
@@ -104,7 +115,9 @@ def main():
         parameters, 
         optimiser, 
         buffers,
+        epochs,
     )
+    save_model_parameters(parameters, expdir / "model_parameters.pkl")
 
 if __name__ == "__main__":
-    main()
+    fire.Fire(main)

@@ -60,7 +60,7 @@ def sample_latents(
     """
     batch_size = images.shape[0]
     timesteps = jax.random.randint(jax.random.PRNGKey(0), (batch_size,), 0, num_timesteps)
-    sampled_alphas = alphas[timesteps][:, None] # Reshape for broadcasting
+    sampled_alphas = alphas[timesteps].reshape(batch_size, 1, 1, 1) 
     noise = jax.random.normal(jax.random.PRNGKey(0), images.shape)
     latents = (sampled_alphas ** 0.5) * images + (1 - sampled_alphas) ** 0.5 * noise
     return latents, noise, timesteps

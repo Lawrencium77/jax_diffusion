@@ -1,48 +1,90 @@
+"""
+U-Net implementation. See https://arxiv.org/abs/1505.04597.
+"""
+
 import jax.numpy as jnp
+from flax import linen as nn
+from jax.random import PRNGKey
 
-from jax import nn, random
-from typing import Callable, List
 
-class DiffusionUNet():
-    """
-    Implementation of U-Net as described in https://arxiv.org/abs/1505.04597.
-    """
-    def __init__(self):
-        pass
+class ConvBlock(nn.Module):
+    out_channels: int
 
-def init_single_layer_params(
-    weights_initializer: Callable,
-    biases_initializer: Callable,
-    input_dim: int, 
-    output_dim: int,
-) -> List[jnp.ndarray]:
-    """
-    Initialise the parameters for a single matmul
-    """
-    weights = weights_initializer(random.key(42), (input_dim, output_dim))
-    biases = biases_initializer(random.key(42), (output_dim,))  
-    return [weights, biases]
+    @nn.compact
+    def __call__(self, x):
+        x = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
+        x = nn.relu(x)
+        x = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
+        x = nn.relu(x)
+        return x
 
-def init_all_parameters(dims: List[int]) -> List[List[jnp.ndarray]]:
-    """
-    Initialise all parameters for a feedforward neural network
-    dims specifies the feature dim at each point in the network
-    """
-    weights_initializer = nn.initializers.glorot_normal()
-    biases_initializer = nn.initializers.zeros
-    return [init_single_layer_params(
-        weights_initializer,
-        biases_initializer,
-        dims[i],
-        dims[i+1],
-    ) for i in range(len(dims)-1)]
 
-def forward_pass(params: List[List[jnp.ndarray]], x: jnp.ndarray, timesteps: jnp.ndarray) -> jnp.ndarray:
-    """
-    Forward pass of a feedforward neural network
-    """
-    for layer_params in params:
-        weights, biases = layer_params
-        x = jnp.matmul(x, weights) + biases
-        x = nn.gelu(x)
-    return x
+class DownBlock(nn.Module):
+    out_channels: int
+
+    @nn.compact
+    def __call__(self, x):
+        conv = ConvBlock(self.out_channels)(x)
+        pooled = nn.max_pool(conv, window_shape=(2, 2), strides=(2, 2), padding="SAME")
+        return conv, pooled
+
+
+class UpBlock(nn.Module):
+    out_channels: int
+
+    @staticmethod
+    def center_crop(tensor, target_shape):
+        """
+        Crop the center of the tensor to the target_shape.
+        """
+        diff_height = tensor.shape[1] - target_shape[1]
+        diff_width = tensor.shape[2] - target_shape[2]
+        crop_h = diff_height // 2
+        crop_w = diff_width // 2
+        return tensor[:, crop_h:crop_h + target_shape[1], crop_w:crop_w + target_shape[2], :]
+    
+    @nn.compact
+    def __call__(self, x, skip):
+        """
+        Note that we crop the upsampled tensor, not the skip tensor.
+        """
+        upsampled = nn.ConvTranspose(features=self.out_channels, kernel_size=(2, 2), strides=(2, 2))(x)
+        if skip.shape[1:3] != upsampled.shape[1:3]:
+            upsampled = self.center_crop(upsampled, skip.shape)
+        
+        concatenated = jnp.concatenate([upsampled, skip], axis=-1)
+        return ConvBlock(self.out_channels)(concatenated)
+
+
+class UNet(nn.Module):
+    out_channels: int  
+
+    @nn.compact
+    def __call__(self, x):
+        conv1, pool1 = DownBlock(64)(x)
+        conv2, pool2 = DownBlock(128)(pool1)
+        conv3, pool3 = DownBlock(256)(pool2)
+
+        bottleneck = ConvBlock(512)(pool3)
+
+        up3 = UpBlock(256)(bottleneck, conv3)
+        up2 = UpBlock(128)(up3, conv2)
+        up1 = UpBlock(64)(up2, conv1)
+
+        output = nn.Conv(self.out_channels, kernel_size=(1, 1), padding="SAME")(up1)
+        return output  
+
+
+def initialize_model(key, input_shape=(1, 28, 28, 1), num_classes=1):
+    model = UNet(out_channels=num_classes)
+    variables = model.init(key, jnp.ones(input_shape))
+    return model, variables
+
+
+if __name__ == "__main__":
+    key = PRNGKey(0)
+    model, variables = initialize_model(key)
+    x = jnp.ones((128, 28, 28, 1))  
+    preds = model.apply(variables, x)
+    print("Input shape:", x.shape)
+    print("Output shape:", preds.shape)
