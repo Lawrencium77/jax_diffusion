@@ -7,6 +7,27 @@ from flax import linen as nn
 from jax.random import PRNGKey
 
 
+class SinusoidalPositionalEmbeddings(nn.Module):
+    @nn.compact
+    def __call__(self, timesteps, d_model=784):
+        """
+        Sinusoidal embeddings as used in Attention is All You Need,
+        """
+        half_dim = d_model // 2
+
+        emb_frequencies = jnp.log(10000) / (half_dim - 1)
+        emb_frequencies = jnp.exp(jnp.arange(half_dim) * -emb_frequencies)
+
+        angle_rads = timesteps[:, None] * emb_frequencies[None, :]
+
+        sin_embs = jnp.sin(angle_rads)
+        cos_embs = jnp.cos(angle_rads)
+
+        embeddings = jnp.concatenate([sin_embs, cos_embs], axis=-1)
+        embeddings = embeddings.reshape(-1, 28, 28, 1)
+        return embeddings
+
+
 class ConvBlock(nn.Module):
     out_channels: int
 
@@ -64,7 +85,10 @@ class UNet(nn.Module):
     out_channels: int
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, timesteps):
+        embeddings = SinusoidalPositionalEmbeddings()(timesteps)
+        x = x + embeddings
+
         conv1, pool1 = DownBlock(64)(x)
         conv2, pool2 = DownBlock(128)(pool1)
         conv3, pool3 = DownBlock(256)(pool2)
@@ -81,7 +105,7 @@ class UNet(nn.Module):
 
 def initialize_model(key, input_shape=(1, 28, 28, 1), num_classes=1):
     model = UNet(out_channels=num_classes)
-    variables = model.init(key, jnp.ones(input_shape))
+    variables = model.init(key, jnp.ones(input_shape), jnp.ones(1))
     return model, variables
 
 

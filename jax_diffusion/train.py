@@ -36,7 +36,9 @@ def get_loss(
     """
     MSE loss.
     """
-    y_pred = MODEL.apply(params, latents)  # Use model.apply instead of passing model
+    y_pred = MODEL.apply(
+        params, latents, timesteps
+    )  # Use model.apply instead of passing model
     losses = jnp.square(y_pred - noise_values)
     return jnp.mean(losses)
 
