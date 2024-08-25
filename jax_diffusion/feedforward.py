@@ -7,10 +7,10 @@ from jax import nn, random
 from typing import Callable, List
 
 def init_single_layer_params(
-        weights_initializer: Callable,
-        biases_initializer: Callable,
-        input_dim: int, 
-        output_dim: int,
+    weights_initializer: Callable,
+    biases_initializer: Callable,
+    input_dim: int, 
+    output_dim: int,
 ) -> List[jnp.ndarray]:
     """
     Initialise the parameters for a single matmul

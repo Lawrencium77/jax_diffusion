@@ -4,19 +4,14 @@ import optax
 from tqdm import tqdm
 
 from dataset import NumpyLoader, get_dataset
-from diffusion_utils import sample_latents, calculate_alphas
+from diffusion_utils import sample_latents, calculate_alphas, normalise_images
 from jax import value_and_grad, jit
 from feedforward import init_all_parameters, forward_pass
 from typing import List, Tuple
 
 BATCH_SIZE = 128
 SIZES = [784, 784, 784]
-IMAGE_NORMALISATION = 255.0
 NUM_TIMESTEPS = 1000
-ALPHAS = calculate_alphas(NUM_TIMESTEPS)
-
-def normalise_images(images: np.ndarray) -> jnp.ndarray:
-    return jnp.array(images, dtype=jnp.float32) / IMAGE_NORMALISATION
 
 def get_optimiser(params, learning_rate=0.0001):
     optimiser = optax.adam(learning_rate)
@@ -87,6 +82,8 @@ def execute_train_loop(
     buffers,
     epochs: int = 10,
 ) -> List[List[jnp.ndarray]]:
+    global ALPHAS
+    ALPHAS = calculate_alphas(train_generator, NUM_TIMESTEPS)
     for epoch in range(epochs):
         print(f">>>>> Epoch {epoch} <<<<<")
         for images, _ in tqdm(train_generator): 
@@ -100,7 +97,13 @@ def main():
     train_generator, val_generator = get_dataset(BATCH_SIZE)
     parameters = init_all_parameters(SIZES)
     optimiser, buffers = get_optimiser(parameters)
-    parameters = execute_train_loop(train_generator, val_generator, parameters, optimiser, buffers)
+    parameters = execute_train_loop(
+        train_generator, 
+        val_generator, 
+        parameters, 
+        optimiser, 
+        buffers,
+    )
 
 if __name__ == "__main__":
     main()
