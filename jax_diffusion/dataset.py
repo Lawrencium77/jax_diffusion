@@ -44,4 +44,4 @@ def get_dataset(
 
     train_loader = NumpyLoader(train_dataset, batch_size=batch_size, num_workers=0, shuffle=True)
     val_loader = NumpyLoader(val_dataset, batch_size=batch_size, num_workers=0, shuffle=False)
-    return mnist_dataset, train_loader, val_loader
+    return train_loader, val_loader

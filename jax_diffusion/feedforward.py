@@ -1,5 +1,5 @@
 """
-Super-simple feedforward neural net.
+Simple feedforward neural net.
 """
 import jax.numpy as jnp
 
@@ -33,7 +33,7 @@ def init_all_parameters(dims: List[int]) -> List[List[jnp.ndarray]]:
         dims[i+1],
     ) for i in range(len(dims)-1)]
 
-def forward_pass(params: List[List[jnp.ndarray]], x: jnp.ndarray) -> jnp.ndarray:
+def forward_pass(params: List[List[jnp.ndarray]], x: jnp.ndarray, timesteps: jnp.ndarray) -> jnp.ndarray:
     """
     Forward pass of a feedforward neural network
     """
@@ -41,4 +41,4 @@ def forward_pass(params: List[List[jnp.ndarray]], x: jnp.ndarray) -> jnp.ndarray
         weights, biases = layer_params
         x = jnp.matmul(x, weights) + biases
         x = nn.gelu(x)
-    return nn.softmax(x)
+    return x

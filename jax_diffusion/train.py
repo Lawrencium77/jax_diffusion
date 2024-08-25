@@ -4,14 +4,16 @@ import optax
 from tqdm import tqdm
 
 from dataset import NumpyLoader, get_dataset
+from diffusion_utils import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
 from feedforward import init_all_parameters, forward_pass
-from typing import List
+from typing import List, Tuple
 
 BATCH_SIZE = 128
-SIZES = [784, 128, 10]
-EPSILON = 1e-8
+SIZES = [784, 784, 784]
 IMAGE_NORMALISATION = 255.0
+NUM_TIMESTEPS = 1000
+ALPHAS = calculate_alphas(NUM_TIMESTEPS)
 
 def normalise_images(images: np.ndarray) -> jnp.ndarray:
     return jnp.array(images, dtype=jnp.float32) / IMAGE_NORMALISATION
@@ -21,53 +23,48 @@ def get_optimiser(params, learning_rate=0.0001):
     buffers = optimiser.init(params)
     return optimiser, buffers
 
-def one_hot(labels: jnp.ndarray) -> jnp.ndarray:
-    """
-    One-hot encode labels.
-    """
-    return jnp.eye(10)[labels]
-
 def get_loss(
     params: jnp.ndarray, 
-    images: jnp.ndarray, 
-    labels: jnp.ndarray,
+    latents: jnp.ndarray, 
+    noise_values: jnp.ndarray,
+    timesteps: jnp.ndarray,
 ) -> jnp.ndarray:
     """
     MSE loss.
     """
-    y_pred = forward_pass(params, images)  
-    losses = jnp.square(y_pred - labels) 
+    y_pred = forward_pass(params, latents, timesteps)  
+    losses = jnp.square(y_pred - noise_values) 
     return jnp.mean(losses) 
 
 @jit
 def get_grads_and_loss(
-    images: jnp.ndarray, 
-    labels: jnp.ndarray, 
     params: List[List[jnp.ndarray]],
+    latents: jnp.ndarray, 
+    noise_values: jnp.ndarray,
+    timesteps: jnp.ndarray,
 ) -> jnp.ndarray:
     """
     Forward pass, backward pass, loss calculation.
     """
-    return value_and_grad(get_loss)(params, images, labels)
+    return value_and_grad(get_loss)(params, latents, noise_values, timesteps)
 
 def train_step(
     images: jnp.ndarray, 
-    labels: jnp.ndarray, 
-    params: jnp.ndarray, 
+    params: List[List[jnp.ndarray]], 
     optimiser: optax._src.base.GradientTransformationExtraArgs, 
     buffers,
-) -> jnp.ndarray:
-    one_hot_labels = one_hot(labels)
-    loss, grads = get_grads_and_loss(images, one_hot_labels, params)
+) -> Tuple[List[List[jnp.ndarray]], jnp.ndarray, jnp.ndarray]:
+    latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
+    loss, grads = get_grads_and_loss(params, latents, noise_values, timesteps)
     updates, buffers = optimiser.update(grads, buffers, params)
     new_params = optax.apply_updates(params, updates)
     return new_params, buffers, loss
 
 @jit
-def get_single_val_loss(images, labels, params):
+def get_single_val_loss(images, params):
     images = normalise_images(images)
-    one_hot_labels = one_hot(labels)
-    loss = get_loss(params, images, one_hot_labels)
+    latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
+    loss = get_loss(params, latents, noise_values, timesteps)
     return loss
 
 def validate(
@@ -76,10 +73,10 @@ def validate(
 ) -> float:
     total_loss = 0
     total_samples = 0
-    for images, labels in val_generator:
-        loss = get_single_val_loss(images, labels, params)
+    for images, _ in val_generator:
+        loss = get_single_val_loss(images, params)
         total_loss += loss
-        total_samples += len(labels)
+        total_samples += images.shape[0]
     return total_loss / total_samples
 
 def execute_train_loop(
@@ -92,15 +89,15 @@ def execute_train_loop(
 ) -> List[List[jnp.ndarray]]:
     for epoch in range(epochs):
         print(f">>>>> Epoch {epoch} <<<<<")
-        for images, labels in tqdm(train_generator): 
+        for images, _ in tqdm(train_generator): 
             images = normalise_images(images)
-            params, buffers, _ = train_step(images, labels, params, optimiser, buffers)
+            params, buffers, _ = train_step(images, params, optimiser, buffers)
         val_loss = validate(val_generator, params)
         print(f"Validation loss: {val_loss * 1e3:.2f} * 10e-3")
     return params
 
 def main():
-    _, train_generator, val_generator = get_dataset(BATCH_SIZE)
+    train_generator, val_generator = get_dataset(BATCH_SIZE)
     parameters = init_all_parameters(SIZES)
     optimiser, buffers = get_optimiser(parameters)
     parameters = execute_train_loop(train_generator, val_generator, parameters, optimiser, buffers)
