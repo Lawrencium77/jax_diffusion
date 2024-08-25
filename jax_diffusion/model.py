@@ -41,23 +41,27 @@ class UpBlock(nn.Module):
         diff_width = tensor.shape[2] - target_shape[2]
         crop_h = diff_height // 2
         crop_w = diff_width // 2
-        return tensor[:, crop_h:crop_h + target_shape[1], crop_w:crop_w + target_shape[2], :]
-    
+        return tensor[
+            :, crop_h : crop_h + target_shape[1], crop_w : crop_w + target_shape[2], :
+        ]
+
     @nn.compact
     def __call__(self, x, skip):
         """
         Note that we crop the upsampled tensor, not the skip tensor.
         """
-        upsampled = nn.ConvTranspose(features=self.out_channels, kernel_size=(2, 2), strides=(2, 2))(x)
+        upsampled = nn.ConvTranspose(
+            features=self.out_channels, kernel_size=(2, 2), strides=(2, 2)
+        )(x)
         if skip.shape[1:3] != upsampled.shape[1:3]:
             upsampled = self.center_crop(upsampled, skip.shape)
-        
+
         concatenated = jnp.concatenate([upsampled, skip], axis=-1)
         return ConvBlock(self.out_channels)(concatenated)
 
 
 class UNet(nn.Module):
-    out_channels: int  
+    out_channels: int
 
     @nn.compact
     def __call__(self, x):
@@ -72,7 +76,7 @@ class UNet(nn.Module):
         up1 = UpBlock(64)(up2, conv1)
 
         output = nn.Conv(self.out_channels, kernel_size=(1, 1), padding="SAME")(up1)
-        return output  
+        return output
 
 
 def initialize_model(key, input_shape=(1, 28, 28, 1), num_classes=1):
@@ -84,7 +88,7 @@ def initialize_model(key, input_shape=(1, 28, 28, 1), num_classes=1):
 if __name__ == "__main__":
     key = PRNGKey(0)
     model, variables = initialize_model(key)
-    x = jnp.ones((128, 28, 28, 1))  
+    x = jnp.ones((128, 28, 28, 1))
     preds = model.apply(variables, x)
     print("Input shape:", x.shape)
     print("Output shape:", preds.shape)

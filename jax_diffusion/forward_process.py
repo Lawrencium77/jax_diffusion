@@ -11,6 +11,7 @@ import jax.numpy as jnp
 from jax import jit
 from utils import normalise_images
 
+
 @jit
 def get_max_noise_batch(images: jnp.ndarray) -> float:
     images = normalise_images(images)
@@ -19,13 +20,14 @@ def get_max_noise_batch(images: jnp.ndarray) -> float:
     batch_max = jnp.max(distance_matrix)
     return batch_max
 
+
 def get_max_noise(train_generator: jnp.ndarray) -> float:
     """
-    Maximum noise is set to be comparable to the maximum pairwise distance between 
+    Maximum noise is set to be comparable to the maximum pairwise distance between
     all training data points.
     See https://arxiv.org/pdf/2006.09011.
     """
-    print(f">>>>> Computing Max Noise Scale from Training Set <<<<<")
+    print(">>>>> Computing Max Noise Scale from Training Set <<<<<")
     max_noise = 0.0
     for images, _ in tqdm(train_generator):
         batch_max = get_max_noise_batch(images)
@@ -35,7 +37,7 @@ def get_max_noise(train_generator: jnp.ndarray) -> float:
 
 def get_noise_schedule(num_timesteps: int, max_noise: float) -> jnp.ndarray:
     """
-    Use geometric progression for noise schedule, as suggested in 
+    Use geometric progression for noise schedule, as suggested in
     https://yang-song.net/blog/2021/score/
     """
     min_noise = 1e-4
@@ -50,17 +52,20 @@ def calculate_alphas(train_generator, num_timesteps) -> jnp.ndarray:
     alphas = jnp.cumprod(1 - noise_schedule)
     return alphas
 
+
 def sample_latents(
-    images: jnp.ndarray, 
-    num_timesteps: jnp.ndarray, 
+    images: jnp.ndarray,
+    num_timesteps: jnp.ndarray,
     alphas: jnp.ndarray,
 ) -> Tuple[jnp.ndarray, jnp.ndarray, int]:
     """
     Sample from forward process.
     """
     batch_size = images.shape[0]
-    timesteps = jax.random.randint(jax.random.PRNGKey(0), (batch_size,), 0, num_timesteps)
-    sampled_alphas = alphas[timesteps].reshape(batch_size, 1, 1, 1) 
+    timesteps = jax.random.randint(
+        jax.random.PRNGKey(0), (batch_size,), 0, num_timesteps
+    )
+    sampled_alphas = alphas[timesteps].reshape(batch_size, 1, 1, 1)
     noise = jax.random.normal(jax.random.PRNGKey(0), images.shape)
-    latents = (sampled_alphas ** 0.5) * images + (1 - sampled_alphas) ** 0.5 * noise
+    latents = (sampled_alphas**0.5) * images + (1 - sampled_alphas) ** 0.5 * noise
     return latents, noise, timesteps
