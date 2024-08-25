@@ -4,10 +4,11 @@ import optax
 from tqdm import tqdm
 
 from dataset import NumpyLoader, get_dataset
-from diffusion_utils import sample_latents, calculate_alphas, normalise_images
+from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
 from feedforward import init_all_parameters, forward_pass
 from typing import List, Tuple
+from utils import normalise_images
 
 BATCH_SIZE = 128
 SIZES = [784, 784, 784]
