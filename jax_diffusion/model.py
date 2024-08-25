@@ -1,10 +1,14 @@
-"""
-Simple feedforward neural net.
-"""
 import jax.numpy as jnp
 
 from jax import nn, random
 from typing import Callable, List
+
+class DiffusionUNet():
+    """
+    Implementation of U-Net as described in https://arxiv.org/abs/1505.04597.
+    """
+    def __init__(self):
+        pass
 
 def init_single_layer_params(
     weights_initializer: Callable,

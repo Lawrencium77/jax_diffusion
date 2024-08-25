@@ -6,7 +6,7 @@ from tqdm import tqdm
 from dataset import NumpyLoader, get_dataset
 from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
-from feedforward import init_all_parameters, forward_pass
+from model import init_all_parameters, forward_pass
 from typing import List, Tuple
 from utils import normalise_images
 
@@ -91,7 +91,7 @@ def execute_train_loop(
             images = normalise_images(images)
             params, buffers, _ = train_step(images, params, optimiser, buffers)
         val_loss = validate(val_generator, params)
-        print(f"Validation loss: {val_loss * 1e3:.2f} * 10e-3")
+        print(f"Validation loss: {val_loss * 1e3:.3f} * 10e-3")
     return params
 
 def main():
