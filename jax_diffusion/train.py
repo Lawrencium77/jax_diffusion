@@ -31,14 +31,12 @@ def get_loss(
     params: jnp.ndarray,
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
-    timesteps: jnp.ndarray,  # TODO: modify network to use timestep info.
+    timesteps: jnp.ndarray,
 ) -> jnp.ndarray:
     """
     MSE loss.
     """
-    y_pred = MODEL.apply(
-        params, latents, timesteps
-    )  # Use model.apply instead of passing model
+    y_pred = MODEL.apply(params, latents, timesteps)
     losses = jnp.square(y_pred - noise_values)
     return jnp.mean(losses)
 
