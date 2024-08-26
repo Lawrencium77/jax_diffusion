@@ -102,7 +102,8 @@ def execute_train_loop(
     params: List[List[jnp.ndarray]],
     optimiser: optax._src.base.GradientTransformationExtraArgs,
     buffers,
-    epochs,
+    epochs: int,
+    print_train_loss: bool,
 ) -> List[List[jnp.ndarray]]:
     global ALPHAS
     ALPHAS = calculate_alphas(train_generator, NUM_TIMESTEPS)
@@ -111,13 +112,19 @@ def execute_train_loop(
         for images, _ in tqdm(train_generator):
             images = normalise_images(images)
             images = reshape_images(images)
-            params, buffers, _ = train_step(images, params, optimiser, buffers)
+            params, buffers, loss = train_step(images, params, optimiser, buffers)
+            if print_train_loss:
+                print(f"Training loss: {loss:.3f}")
         val_loss = validate(val_generator, params)
         print(f"Validation loss: {val_loss * 1e3:.3f} * 10e-3")
     return params
 
 
-def main(expdir: str = None, epochs: int = 10):
+def main(
+    expdir: str = None,
+    epochs: int = 10,
+    print_train_loss: bool = False,
+):
     if expdir is None:
         raise ValueError("Please provide an experiment directory.")
     expdir = Path(expdir)
@@ -135,6 +142,7 @@ def main(expdir: str = None, epochs: int = 10):
         optimiser,
         buffers,
         epochs,
+        print_train_loss,
     )
     save_model_parameters(parameters, expdir / "model_parameters.pkl")
 
