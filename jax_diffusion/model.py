@@ -17,7 +17,6 @@ class SinusoidalPositionalEmbeddings(nn.Module):
         """
         Sinusoidal embeddings as used in Attention is All You Need,
         """
-        print(f"Applying embeddings with d_model={self.d_model}")
         half_dim = self.d_model // 2
 
         emb_frequencies = jnp.log(self.max_period) / (half_dim - 1)
