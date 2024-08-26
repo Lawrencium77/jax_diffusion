@@ -2,20 +2,25 @@
 U-Net implementation. See https://arxiv.org/abs/1505.04597.
 """
 
+from typing import Optional
 import jax.numpy as jnp
 from flax import linen as nn
 from jax.random import PRNGKey
 
 
 class SinusoidalPositionalEmbeddings(nn.Module):
+    d_model: int
+    max_period: int = 10000
+
     @nn.compact
-    def __call__(self, timesteps, d_model=784):
+    def __call__(self, timesteps):
         """
         Sinusoidal embeddings as used in Attention is All You Need,
         """
-        half_dim = d_model // 2
+        print(f"Applying embeddings with d_model={self.d_model}")
+        half_dim = self.d_model // 2
 
-        emb_frequencies = jnp.log(10000) / (half_dim - 1)
+        emb_frequencies = jnp.log(self.max_period) / (half_dim - 1)
         emb_frequencies = jnp.exp(jnp.arange(half_dim) * -emb_frequencies)
 
         angle_rads = timesteps[:, None] * emb_frequencies[None, :]
@@ -24,7 +29,8 @@ class SinusoidalPositionalEmbeddings(nn.Module):
         cos_embs = jnp.cos(angle_rads)
 
         embeddings = jnp.concatenate([sin_embs, cos_embs], axis=-1)
-        embeddings = embeddings.reshape(-1, 28, 28, 1)
+        height = int(self.d_model**0.5)
+        embeddings = embeddings.reshape(-1, height, height, 1)
         return embeddings
 
 
@@ -34,9 +40,9 @@ class ConvBlock(nn.Module):
     @nn.compact
     def __call__(self, x):
         x = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
-        x = nn.relu(x)
+        x = nn.swish(x)
         x = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
-        x = nn.relu(x)
+        x = nn.swish(x)
         return x
 
 
@@ -44,7 +50,9 @@ class DownBlock(nn.Module):
     out_channels: int
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x: jnp.ndarray, timesteps: Optional[jnp.ndarray] = None):
+        if timesteps is not None:
+            x += SinusoidalPositionalEmbeddings(x.shape[1] ** 2)(timesteps)
         conv = ConvBlock(self.out_channels)(x)
         pooled = nn.max_pool(conv, window_shape=(2, 2), strides=(2, 2), padding="SAME")
         return conv, pooled
@@ -67,10 +75,17 @@ class UpBlock(nn.Module):
         ]
 
     @nn.compact
-    def __call__(self, x, skip):
+    def __call__(
+        self,
+        x: jnp.ndarray,
+        skip: jnp.ndarray,
+        timesteps: Optional[jnp.ndarray] = None,
+    ) -> jnp.ndarray:
         """
         Note that we crop the upsampled tensor, not the skip tensor.
         """
+        if timesteps is not None:
+            x += SinusoidalPositionalEmbeddings(x.shape[1] ** 2)(timesteps)
         upsampled = nn.ConvTranspose(
             features=self.out_channels, kernel_size=(2, 2), strides=(2, 2)
         )(x)
@@ -86,18 +101,19 @@ class UNet(nn.Module):
 
     @nn.compact
     def __call__(self, x, timesteps):
-        embeddings = SinusoidalPositionalEmbeddings()(timesteps)
-        x = x + embeddings
-
-        conv1, pool1 = DownBlock(64)(x)
-        conv2, pool2 = DownBlock(128)(pool1)
-        conv3, pool3 = DownBlock(256)(pool2)
+        conv1, pool1 = DownBlock(64)(x, timesteps)
+        conv2, pool2 = DownBlock(128)(pool1, timesteps)
+        conv3, pool3 = DownBlock(256)(
+            pool2
+        )  # Non-even feat dim so don't apply timestep embeddings
 
         bottleneck = ConvBlock(512)(pool3)
 
-        up3 = UpBlock(256)(bottleneck, conv3)
-        up2 = UpBlock(128)(up3, conv2)
-        up1 = UpBlock(64)(up2, conv1)
+        up3 = UpBlock(256)(bottleneck, conv3, timesteps)
+        up2 = UpBlock(128)(
+            up3, conv2
+        )  # Non-even feat dim so don't apply timestep embeddings
+        up1 = UpBlock(64)(up2, conv1, timesteps)
 
         output = nn.Conv(self.out_channels, kernel_size=(1, 1), padding="SAME")(up1)
         return output
@@ -113,6 +129,7 @@ if __name__ == "__main__":
     key = PRNGKey(0)
     model, variables = initialize_model(key)
     x = jnp.ones((128, 28, 28, 1))
-    preds = model.apply(variables, x)
+    timesteps = jnp.arange(128)
+    preds = model.apply(variables, x, timesteps)
     print("Input shape:", x.shape)
     print("Output shape:", preds.shape)
