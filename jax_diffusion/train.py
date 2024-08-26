@@ -106,7 +106,7 @@ def execute_train_loop(
     print_train_loss: bool,
 ) -> List[List[jnp.ndarray]]:
     global ALPHAS
-    ALPHAS = calculate_alphas(train_generator, NUM_TIMESTEPS)
+    ALPHAS = calculate_alphas(NUM_TIMESTEPS)
     for epoch in range(epochs):
         print(f">>>>> Epoch {epoch} <<<<<")
         for images, _ in tqdm(train_generator):
