@@ -31,14 +31,12 @@ def get_loss(
     params: jnp.ndarray,
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
-    timesteps: jnp.ndarray,  # TODO: modify network to use timestep info.
+    timesteps: jnp.ndarray,
 ) -> jnp.ndarray:
     """
     MSE loss.
     """
-    y_pred = MODEL.apply(
-        params, latents, timesteps
-    )  # Use model.apply instead of passing model
+    y_pred = MODEL.apply(params, latents, timesteps)
     losses = jnp.square(y_pred - noise_values)
     return jnp.mean(losses)
 
@@ -106,7 +104,7 @@ def execute_train_loop(
     print_train_loss: bool,
 ) -> List[List[jnp.ndarray]]:
     global ALPHAS
-    ALPHAS = calculate_alphas(train_generator, NUM_TIMESTEPS)
+    ALPHAS = calculate_alphas(NUM_TIMESTEPS)
     for epoch in range(epochs):
         print(f">>>>> Epoch {epoch} <<<<<")
         for images, _ in tqdm(train_generator):
