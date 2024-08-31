@@ -9,6 +9,3 @@ repos:
   rev: v1.1.378
   hooks:
     - id: pyright
-      additional_dependencies: []
-      env:
-        PYRIGHT_PYTHON_GLOBAL: /Users/latkins/git/jax_diffusion/.venv/bin/python3
