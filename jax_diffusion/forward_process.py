@@ -18,7 +18,7 @@ def get_noise_schedule(num_timesteps: int) -> jnp.ndarray:
     return jnp.linspace(MIN_NOISE, MAX_NOISE, num_timesteps)
 
 
-def calculate_alphas(num_timesteps) -> jnp.ndarray:
+def calculate_alphas(num_timesteps: int) -> jnp.ndarray:
     noise_schedule = get_noise_schedule(num_timesteps)
     alphas = jnp.cumprod(1 - noise_schedule)
     return alphas
@@ -26,7 +26,7 @@ def calculate_alphas(num_timesteps) -> jnp.ndarray:
 
 def sample_latents(
     images: jnp.ndarray,
-    num_timesteps: jnp.ndarray,
+    num_timesteps: int,
     alphas: jnp.ndarray,
 ) -> Tuple[jnp.ndarray, jnp.ndarray, int]:
     """
