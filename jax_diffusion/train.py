@@ -3,14 +3,14 @@ import jax.numpy as jnp
 import optax
 import fire
 from tqdm import tqdm
-from flax.training import train_state  # Import train_state from Flax
+from flax.training import train_state
 
 from dataset import NumpyLoader, get_dataset
 from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
 from jax.random import PRNGKey
 from model import initialize_model
-from typing import Tuple
+from typing import Any, Optional, Tuple
 from utils import (
     count_parameters,
     normalise_images,
@@ -22,75 +22,89 @@ BATCH_SIZE = 128
 NUM_TIMESTEPS = 1000
 
 
+class TrainState(train_state.TrainState):
+    batch_stats: Any
+
+
 def get_optimiser(learning_rate=0.0001):
     return optax.adam(learning_rate)
 
 
 def get_loss(
     params: jnp.ndarray,
+    batch_stats: jnp.ndarray,
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
     train: bool,
-) -> jnp.ndarray:
+) -> Tuple[jnp.ndarray, dict]:
     """
-    MSE loss.
+    MSE loss with model application.
     """
-    y_pred = MODEL.apply(
-        params,
+    model_outputs, updates = MODEL.apply(
+        {"params": params, "batch_stats": batch_stats},
         latents,
         timesteps,
-        train,
+        train=train,
+        mutable=["batch_stats"] if train else False,
     )
-    losses = jnp.square(y_pred - noise_values)
-    return jnp.mean(losses)
+    losses = jnp.square(model_outputs - noise_values)
+    loss = jnp.mean(losses)
+    return loss, updates
 
 
 @jit
 def get_grads_and_loss(
-    state: train_state.TrainState,
+    state: TrainState,
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+) -> Tuple[jnp.ndarray, jnp.ndarray, dict]:
     """
     Forward pass, backward pass, loss calculation.
     """
 
     def loss_fn(params):
-        return get_loss(params, latents, noise_values, timesteps, train=True)
+        loss, updates = get_loss(
+            params, state.batch_stats, latents, noise_values, timesteps, train=True
+        )
+        return loss, updates
 
-    loss, grads = value_and_grad(loss_fn)(state.params)
-    return loss, grads
+    grad_fn = value_and_grad(loss_fn, has_aux=True)
+    (loss, updates), grads = grad_fn(state.params)
+    return loss, grads, updates
 
 
 def train_step(
     images: jnp.ndarray,
-    state: train_state.TrainState,
-) -> Tuple[train_state.TrainState, jnp.ndarray]:
+    state: TrainState,
+) -> Tuple[TrainState, jnp.ndarray]:
     latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
-    loss, grads = get_grads_and_loss(state, latents, noise_values, timesteps)
+    loss, grads, updates = get_grads_and_loss(state, latents, noise_values, timesteps)
     state = state.apply_gradients(grads=grads)
+    state = state.replace(batch_stats=updates["batch_stats"])
     return state, loss
 
 
 @jit
-def get_single_val_loss(images, params):
+def get_single_val_loss(images, state: TrainState):
     images = normalise_images(images)
     images = reshape_images(images)
     latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
-    loss = get_loss(params, latents, noise_values, timesteps, train=False)
+    loss, _ = get_loss(
+        state.params, state.batch_stats, latents, noise_values, timesteps, train=False
+    )
     return loss
 
 
 def validate(
     val_generator: NumpyLoader,
-    params: jnp.ndarray,
+    state: TrainState,
 ) -> float:
     total_loss = 0
     total_samples = 0
     for images, _ in val_generator:
-        loss = get_single_val_loss(images, params)
+        loss = get_single_val_loss(images, state)
         total_loss += loss
         total_samples += images.shape[0]
     return total_loss / total_samples
@@ -99,10 +113,10 @@ def validate(
 def execute_train_loop(
     train_generator: NumpyLoader,
     val_generator: NumpyLoader,
-    state: train_state.TrainState,
+    state: TrainState,
     epochs: int,
     print_train_loss: bool,
-) -> train_state.TrainState:
+) -> TrainState:
     global ALPHAS
     ALPHAS = calculate_alphas(NUM_TIMESTEPS)
     for epoch in range(epochs):
@@ -113,13 +127,13 @@ def execute_train_loop(
             state, loss = train_step(images, state)
             if print_train_loss:
                 print(f"Training loss: {loss:.3f}")
-        val_loss = validate(val_generator, state.params)
+        val_loss = validate(val_generator, state)
         print(f"Validation loss: {val_loss * 1e3:.3f} * 10e-3")
     return state
 
 
 def main(
-    expdir: str = None,
+    expdir: Optional[str] = None,
     epochs: int = 10,
     print_train_loss: bool = False,
 ):
@@ -128,14 +142,15 @@ def main(
     expdir = Path(expdir)
     global MODEL
     train_generator, val_generator = get_dataset(BATCH_SIZE)
-    MODEL, parameters = initialize_model(PRNGKey(0))
+    MODEL, parameters, batch_stats = initialize_model(PRNGKey(0))
     print(
         f"Initialised model with {count_parameters(parameters) / 10 ** 6:.1f} M parameters."
     )
-    state = train_state.TrainState.create(
+    state = TrainState.create(
         apply_fn=MODEL.apply,
         params=parameters,
         tx=get_optimiser(),
+        batch_stats=batch_stats,
     )
     state = execute_train_loop(
         train_generator,

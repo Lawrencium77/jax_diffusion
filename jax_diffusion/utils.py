@@ -14,7 +14,7 @@ def reshape_images(images: jnp.ndarray) -> jnp.ndarray:
     return images.reshape(-1, 28, 28, 1)
 
 
-def count_parameters(variables):
+def count_parameters(params):
     def count_params_recursive(params):
         total = 0
         if isinstance(params, dict):
@@ -24,7 +24,7 @@ def count_parameters(variables):
             total += jnp.prod(jnp.array(params.shape))
         return total
 
-    return count_params_recursive(variables["params"])
+    return count_params_recursive(params)
 
 
 def save_model_parameters(parameters, file_path: Path):

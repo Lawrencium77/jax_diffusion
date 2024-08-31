@@ -39,8 +39,10 @@ class ConvBlock(nn.Module):
     @nn.compact
     def __call__(self, x, train: bool):
         x = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
+        x = nn.BatchNorm(use_running_average=not train)(x)
         x = nn.swish(x)
         x = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
+        x = nn.BatchNorm(use_running_average=not train)(x)
         x = nn.swish(x)
         return x
 
@@ -132,7 +134,7 @@ def initialize_model(key, input_shape=(1, 28, 28, 1), num_classes=1):
         jnp.ones(1),
         train=True,
     )
-    return model, variables
+    return model, variables["params"], variables["batch_stats"]
 
 
 if __name__ == "__main__":
