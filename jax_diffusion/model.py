@@ -5,7 +5,7 @@ U-Net implementation. See https://arxiv.org/abs/1505.04597.
 from typing import Optional, Tuple
 import jax.numpy as jnp
 from flax import linen as nn
-from jax.random import PRNGKey
+from jax import Array
 
 from utils import NestedDict
 
@@ -67,7 +67,9 @@ class UpBlock(nn.Module):
     out_channels: int
 
     @staticmethod
-    def center_crop(tensor: jnp.ndarray, target_shape: Tuple[int]) -> jnp.ndarray:
+    def center_crop(
+        tensor: jnp.ndarray, target_shape: Tuple[int, int, int, int]
+    ) -> jnp.ndarray:
         """
         Crop the center of the tensor to the target_shape.
         """
@@ -131,7 +133,9 @@ class UNet(nn.Module):
 
 
 def initialize_model(
-    key: PRNGKey, input_shape: Tuple[int] = (1, 28, 28, 1), num_classes: int = 1
+    key: Array,
+    input_shape: Tuple[int, int, int, int] = (1, 28, 28, 1),
+    num_classes: int = 1,
 ) -> Tuple[UNet, NestedDict, NestedDict]:
     model = UNet(out_channels=num_classes)
     variables = model.init(
@@ -141,13 +145,3 @@ def initialize_model(
         train=True,
     )
     return model, variables["params"], variables["batch_stats"]
-
-
-if __name__ == "__main__":
-    key = PRNGKey(0)
-    model, variables = initialize_model(key)
-    x = jnp.ones((128, 28, 28, 1))
-    timesteps = jnp.arange(128)
-    preds = model.apply(variables, x, timesteps)
-    print("Input shape:", x.shape)
-    print("Output shape:", preds.shape)

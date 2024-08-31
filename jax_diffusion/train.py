@@ -1,5 +1,6 @@
 from pathlib import Path
 import jax.numpy as jnp
+import numpy as np
 import optax
 import fire
 from tqdm import tqdm
@@ -29,7 +30,7 @@ class TrainState(train_state.TrainState):
 
 def get_optimiser(
     learning_rate: float = 0.0001,
-) -> optax._src.base.GradientTransformationExtraArgs:
+) -> optax.GradientTransformation:
     return optax.adam(learning_rate)
 
 
@@ -90,10 +91,12 @@ def train_step(
 
 
 @jit
-def get_single_val_loss(images: jnp.ndarray, state: TrainState) -> jnp.ndarray:
-    images = normalise_images(images)
-    images = reshape_images(images)
-    latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
+def get_single_val_loss(images: np.ndarray, state: TrainState) -> jnp.ndarray:
+    images_normalised = normalise_images(images)
+    images_reshaped = reshape_images(images_normalised)
+    latents, noise_values, timesteps = sample_latents(
+        images_reshaped, NUM_TIMESTEPS, ALPHAS
+    )
     loss, _ = get_loss(
         state.params, state.batch_stats, latents, noise_values, timesteps, train=False
     )
@@ -142,7 +145,7 @@ def main(
 ) -> None:
     if expdir is None:
         raise ValueError("Please provide an experiment directory.")
-    expdir = Path(expdir)
+    expdir_path = Path(expdir)
     global MODEL
     train_generator, val_generator = get_dataset(BATCH_SIZE)
     MODEL, parameters, batch_stats = initialize_model(PRNGKey(0))
@@ -162,7 +165,7 @@ def main(
         epochs,
         print_train_loss,
     )
-    save_model_parameters(state.params, expdir / "model_parameters.pkl")
+    save_model_parameters(state.params, expdir_path / Path("model_parameters.pkl"))
 
 
 if __name__ == "__main__":

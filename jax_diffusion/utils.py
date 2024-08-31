@@ -19,8 +19,8 @@ def reshape_images(images: jnp.ndarray) -> jnp.ndarray:
     return images.reshape(-1, 28, 28, 1)
 
 
-def count_params(params: Params) -> int:
-    total = 0
+def count_params(params: Params) -> jnp.ndarray:
+    total = jnp.array(0)
     if isinstance(params, dict):
         for value in params.values():
             total += count_params(value)

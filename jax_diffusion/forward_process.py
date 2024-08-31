@@ -28,7 +28,7 @@ def sample_latents(
     images: jnp.ndarray,
     num_timesteps: int,
     alphas: jnp.ndarray,
-) -> Tuple[jnp.ndarray, jnp.ndarray, int]:
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """
     Sample from forward process.
     """

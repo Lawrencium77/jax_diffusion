@@ -26,7 +26,6 @@ class NumpyLoader(data.DataLoader):
         timeout: int = 0,
         worker_init_fn: Optional[Callable] = None,
     ) -> None:
-        breakpoint()
         super(self.__class__, self).__init__(
             dataset,
             batch_size=batch_size,
