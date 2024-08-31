@@ -4,28 +4,24 @@ import numpy as np
 import optax
 import fire
 from tqdm import tqdm
-from flax.training import train_state
 
 from dataset import NumpyLoader, get_dataset
 from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
 from jax.random import PRNGKey
 from model import initialize_model
-from typing import Any, Optional, Tuple
+from typing import Optional, Tuple
 from utils import (
     ParamType,
+    TrainState,
     count_params,
     normalise_images,
     reshape_images,
-    save_model_parameters,
+    save_state,
 )
 
 BATCH_SIZE = 128
 NUM_TIMESTEPS = 1000
-
-
-class TrainState(train_state.TrainState):
-    batch_stats: Any
 
 
 def get_optimiser(
@@ -149,9 +145,7 @@ def execute_train_loop(
             if val_every > 0 and step > 0 and step % val_every == 0:
                 validate(val_generator, state)
         validate(val_generator, state)
-        save_model_parameters(
-            state.params, expdir / Path(f"model_parameters_epoch_{epoch}.pkl")
-        )
+        save_state(state, expdir / Path(f"model_parameters_epoch_{epoch}.pkl"))
     return state
 
 

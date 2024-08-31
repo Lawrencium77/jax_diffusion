@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from flax.core import FrozenDict
+from flax.training import train_state
 
 IMAGE_NORMALISATION = 255.0
 
@@ -13,6 +14,10 @@ ParamType = Union[
     Dict[str, Any],
     jnp.ndarray,
 ]
+
+
+class TrainState(train_state.TrainState):
+    batch_stats: Any
 
 
 def normalise_images(images: np.ndarray) -> jnp.ndarray:
@@ -33,18 +38,21 @@ def count_params(params: ParamType) -> jnp.ndarray:
     return total
 
 
-def save_model_parameters(parameters: ParamType, file_path: Path) -> None:
-    param_bytes = flax.serialization.to_bytes(parameters)
+def save_state(state: TrainState, file_path: Path) -> None:
+    state_bytes = flax.serialization.to_bytes(state)
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_bytes(param_bytes)
+    file_path.write_bytes(state_bytes)
     print(f"Saved model parameters to {file_path}")
 
 
-def load_model_parameters(file_path: Path) -> ParamType:
+def load_state(file_path: Path) -> TrainState:
     if not file_path.exists():
         raise FileNotFoundError(f"No parameter file found at {file_path}")
 
-    param_bytes = file_path.read_bytes()
-    parameters = flax.serialization.from_bytes(None, param_bytes)
-    print(f"Loaded model parameters from {file_path}")
-    return parameters
+    state_bytes = file_path.read_bytes()
+    state = flax.serialization.from_bytes(None, state_bytes)
+
+    if not isinstance(state, TrainState):
+        raise RuntimeError(f"Invalid state in file {file_path}")
+    print(f"Loaded state from {file_path}")
+    return state
