@@ -37,10 +37,12 @@ class ConvBlock(nn.Module):
     out_channels: int
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, train: bool):
         x = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
+        x = nn.BatchNorm(use_running_average=not train)(x)
         x = nn.swish(x)
         x = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
+        x = nn.BatchNorm(use_running_average=not train)(x)
         x = nn.swish(x)
         return x
 
@@ -49,10 +51,12 @@ class DownBlock(nn.Module):
     out_channels: int
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, timesteps: Optional[jnp.ndarray] = None):
+    def __call__(
+        self, x: jnp.ndarray, train: bool, timesteps: Optional[jnp.ndarray] = None
+    ):
         if timesteps is not None:
             x += SinusoidalPositionalEmbeddings(x.shape[1] ** 2)(timesteps)
-        conv = ConvBlock(self.out_channels)(x)
+        conv = ConvBlock(self.out_channels)(x, train)
         pooled = nn.max_pool(conv, window_shape=(2, 2), strides=(2, 2), padding="SAME")
         return conv, pooled
 
@@ -78,6 +82,7 @@ class UpBlock(nn.Module):
         self,
         x: jnp.ndarray,
         skip: jnp.ndarray,
+        train: bool,
         timesteps: Optional[jnp.ndarray] = None,
     ) -> jnp.ndarray:
         """
@@ -92,27 +97,30 @@ class UpBlock(nn.Module):
             upsampled = self.center_crop(upsampled, skip.shape)
 
         concatenated = jnp.concatenate([upsampled, skip], axis=-1)
-        return ConvBlock(self.out_channels)(concatenated)
+        return ConvBlock(self.out_channels)(concatenated, train)
 
 
 class UNet(nn.Module):
     out_channels: int
 
     @nn.compact
-    def __call__(self, x, timesteps):
-        conv1, pool1 = DownBlock(64)(x, timesteps)
-        conv2, pool2 = DownBlock(128)(pool1, timesteps)
+    def __call__(self, x, timesteps, train: bool):
+        conv1, pool1 = DownBlock(64)(x, train, timesteps)
+        conv2, pool2 = DownBlock(128)(pool1, train, timesteps)
         conv3, pool3 = DownBlock(256)(
-            pool2
+            pool2,
+            train=train,
         )  # Non-even feat dim so don't apply timestep embeddings
 
-        bottleneck = ConvBlock(512)(pool3)
+        bottleneck = ConvBlock(512)(pool3, train)
 
-        up3 = UpBlock(256)(bottleneck, conv3, timesteps)
+        up3 = UpBlock(256)(bottleneck, conv3, train, timesteps)
         up2 = UpBlock(128)(
-            up3, conv2
+            up3,
+            conv2,
+            train,
         )  # Non-even feat dim so don't apply timestep embeddings
-        up1 = UpBlock(64)(up2, conv1, timesteps)
+        up1 = UpBlock(64)(up2, conv1, train, timesteps)
 
         output = nn.Conv(self.out_channels, kernel_size=(1, 1), padding="SAME")(up1)
         return output
@@ -120,8 +128,13 @@ class UNet(nn.Module):
 
 def initialize_model(key, input_shape=(1, 28, 28, 1), num_classes=1):
     model = UNet(out_channels=num_classes)
-    variables = model.init(key, jnp.ones(input_shape), jnp.ones(1))
-    return model, variables
+    variables = model.init(
+        key,
+        jnp.ones(input_shape),
+        jnp.ones(1),
+        train=True,
+    )
+    return model, variables["params"], variables["batch_stats"]
 
 
 if __name__ == "__main__":
