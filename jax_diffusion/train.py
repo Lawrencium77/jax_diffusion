@@ -12,7 +12,7 @@ from jax.random import PRNGKey
 from model import initialize_model
 from typing import Any, Optional, Tuple
 from utils import (
-    count_parameters,
+    count_params,
     normalise_images,
     reshape_images,
     save_model_parameters,
@@ -144,7 +144,7 @@ def main(
     train_generator, val_generator = get_dataset(BATCH_SIZE)
     MODEL, parameters, batch_stats = initialize_model(PRNGKey(0))
     print(
-        f"Initialised model with {count_parameters(parameters) / 10 ** 6:.1f} M parameters."
+        f"Initialised model with {count_params(parameters) / 10 ** 6:.1f} M parameters."
     )
     state = TrainState.create(
         apply_fn=MODEL.apply,
