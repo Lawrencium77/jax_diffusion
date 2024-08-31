@@ -2,10 +2,12 @@
 U-Net implementation. See https://arxiv.org/abs/1505.04597.
 """
 
-from typing import Optional
+from typing import Optional, Tuple
 import jax.numpy as jnp
 from flax import linen as nn
-from jax.random import PRNGKey
+from jax import Array
+
+from utils import ParamType
 
 
 class SinusoidalPositionalEmbeddings(nn.Module):
@@ -13,7 +15,7 @@ class SinusoidalPositionalEmbeddings(nn.Module):
     max_period: int = 10000
 
     @nn.compact
-    def __call__(self, timesteps):
+    def __call__(self, timesteps: jnp.ndarray) -> jnp.ndarray:
         """
         Sinusoidal embeddings as used in Attention is All You Need,
         """
@@ -37,7 +39,7 @@ class ConvBlock(nn.Module):
     out_channels: int
 
     @nn.compact
-    def __call__(self, x, train: bool):
+    def __call__(self, x: jnp.ndarray, train: bool) -> jnp.ndarray:
         x = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
         x = nn.BatchNorm(use_running_average=not train)(x)
         x = nn.swish(x)
@@ -53,7 +55,7 @@ class DownBlock(nn.Module):
     @nn.compact
     def __call__(
         self, x: jnp.ndarray, train: bool, timesteps: Optional[jnp.ndarray] = None
-    ):
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         if timesteps is not None:
             x += SinusoidalPositionalEmbeddings(x.shape[1] ** 2)(timesteps)
         conv = ConvBlock(self.out_channels)(x, train)
@@ -65,7 +67,7 @@ class UpBlock(nn.Module):
     out_channels: int
 
     @staticmethod
-    def center_crop(tensor, target_shape):
+    def center_crop(tensor: jnp.ndarray, target_shape: Tuple[int, ...]) -> jnp.ndarray:
         """
         Crop the center of the tensor to the target_shape.
         """
@@ -104,7 +106,9 @@ class UNet(nn.Module):
     out_channels: int
 
     @nn.compact
-    def __call__(self, x, timesteps, train: bool):
+    def __call__(
+        self, x: jnp.ndarray, timesteps: jnp.ndarray, train: bool
+    ) -> jnp.ndarray:
         conv1, pool1 = DownBlock(64)(x, train, timesteps)
         conv2, pool2 = DownBlock(128)(pool1, train, timesteps)
         conv3, pool3 = DownBlock(256)(
@@ -126,7 +130,11 @@ class UNet(nn.Module):
         return output
 
 
-def initialize_model(key, input_shape=(1, 28, 28, 1), num_classes=1):
+def initialize_model(
+    key: Array,
+    input_shape: Tuple[int, ...] = (1, 28, 28, 1),
+    num_classes: int = 1,
+) -> Tuple[UNet, ParamType, ParamType]:
     model = UNet(out_channels=num_classes)
     variables = model.init(
         key,
@@ -135,13 +143,3 @@ def initialize_model(key, input_shape=(1, 28, 28, 1), num_classes=1):
         train=True,
     )
     return model, variables["params"], variables["batch_stats"]
-
-
-if __name__ == "__main__":
-    key = PRNGKey(0)
-    model, variables = initialize_model(key)
-    x = jnp.ones((128, 28, 28, 1))
-    timesteps = jnp.arange(128)
-    preds = model.apply(variables, x, timesteps)
-    print("Input shape:", x.shape)
-    print("Output shape:", preds.shape)

@@ -1,30 +1,31 @@
-from typing import Tuple
+from typing import Callable, Iterable, List, Optional, Tuple, Union
 import numpy as np
 import jax.numpy as jnp
 from jax.tree_util import tree_map
 from torch.utils import data
 from torchvision.datasets import MNIST
-from torch.utils.data import random_split
+from torch.utils.data import random_split, Sampler, Dataset
+from PIL.Image import Image
 
 
-def numpy_collate(batch):
+def numpy_collate(batch: List[Tuple[np.ndarray, int]]) -> List[np.ndarray]:
     return tree_map(np.asarray, data.default_collate(batch))
 
 
 class NumpyLoader(data.DataLoader):
     def __init__(
         self,
-        dataset,
-        batch_size=1,
-        shuffle=False,
-        sampler=None,
-        batch_sampler=None,
-        num_workers=0,
-        pin_memory=False,
-        drop_last=False,
-        timeout=0,
-        worker_init_fn=None,
-    ):
+        dataset: Dataset,
+        batch_size: int = 1,
+        shuffle: bool = False,
+        sampler: Union[Sampler, Iterable, None] = None,
+        batch_sampler: Union[Sampler[List], Iterable[List], None] = None,
+        num_workers: int = 0,
+        pin_memory: bool = False,
+        drop_last: bool = False,
+        timeout: int = 0,
+        worker_init_fn: Optional[Callable] = None,
+    ) -> None:
         super(self.__class__, self).__init__(
             dataset,
             batch_size=batch_size,
@@ -41,14 +42,14 @@ class NumpyLoader(data.DataLoader):
 
 
 class FlattenAndCast(object):
-    def __call__(self, pic):
+    def __call__(self, pic: Image) -> np.ndarray:
         return np.ravel(np.array(pic, dtype=jnp.float32))
 
 
 def get_dataset(
     batch_size: int,
     val_split: float = 0.2,
-) -> Tuple[MNIST, NumpyLoader, NumpyLoader]:
+) -> Tuple[NumpyLoader, NumpyLoader]:
     mnist_dataset = MNIST("/tmp/mnist/", download=True, transform=FlattenAndCast())
 
     val_size = int(len(mnist_dataset) * val_split)
