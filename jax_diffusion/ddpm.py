@@ -39,6 +39,7 @@ def run_ddpm(
     alphas: jnp.ndarray,
     noise_schedule: jnp.ndarray,
     num_timesteps: int,
+    prng_key: jax.Array,
 ) -> jnp.ndarray:
     z = z_T
     timestep_array = jnp.array([num_timesteps])
@@ -53,7 +54,7 @@ def run_ddpm(
             train=False,
         )
         mu = calculate_mean(z, beta, alpha, g)
-        epsilon = jax.random.normal(jax.random.PRNGKey(0), IMAGE_SHAPE)
+        epsilon = jax.random.normal(prng_key, IMAGE_SHAPE)
         z = mu + beta**0.5 * epsilon
     return z
 
@@ -63,7 +64,8 @@ def ddpm(
 ) -> jnp.ndarray:
     noise_schedule = get_noise_schedule(num_timesteps)
     alphas = calculate_alphas(num_timesteps)
-    z_T = jax.random.normal(jax.random.PRNGKey(0), IMAGE_SHAPE)
+    prng_key = jax.random.PRNGKey(0)
+    z_T = jax.random.normal(prng_key, IMAGE_SHAPE)
     image = run_ddpm(
         model,
         params,
@@ -72,6 +74,7 @@ def ddpm(
         alphas,
         noise_schedule,
         num_timesteps,
+        prng_key,
     )
     return image
 
@@ -82,7 +85,7 @@ def get_image(checkpoint_path: Path) -> jnp.ndarray:
 
 
 def save_image_as_jpeg(image_array: jnp.ndarray, file_path: str) -> None:
-    image = image_array.squeeze()  # Shape becomes (28, 28)
+    image = image_array.squeeze()
     image_np = np.array(image)
     image_pil = Image.fromarray((image_np * 255).astype(np.uint8))
     image_pil.save(file_path, format="JPEG")
