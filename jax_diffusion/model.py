@@ -7,6 +7,8 @@ import jax.numpy as jnp
 from flax import linen as nn
 from jax.random import PRNGKey
 
+from jax_diffusion.utils import NestedDict
+
 
 class SinusoidalPositionalEmbeddings(nn.Module):
     d_model: int
@@ -130,7 +132,7 @@ class UNet(nn.Module):
 
 def initialize_model(
     key: PRNGKey, input_shape: Tuple[int] = (1, 28, 28, 1), num_classes: int = 1
-):
+) -> Tuple[UNet, NestedDict, NestedDict]:
     model = UNet(out_channels=num_classes)
     variables = model.init(
         key,
