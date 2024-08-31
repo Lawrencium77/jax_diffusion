@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from flax import linen as nn
 from jax.random import PRNGKey
 
-from jax_diffusion.utils import NestedDict
+from utils import NestedDict
 
 
 class SinusoidalPositionalEmbeddings(nn.Module):
