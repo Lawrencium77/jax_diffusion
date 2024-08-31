@@ -132,6 +132,7 @@ def execute_train_loop(
     val_generator: NumpyLoader,
     state: TrainState,
     epochs: int,
+    expdir: Path,
     train_loss_every: int = -1,
     val_every: int = -1,
 ) -> TrainState:
@@ -148,6 +149,9 @@ def execute_train_loop(
             if val_every > 0 and step > 0 and step % val_every == 0:
                 validate(val_generator, state)
         validate(val_generator, state)
+        save_model_parameters(
+            state.params, expdir / Path(f"model_parameters_epoch_{epoch}.pkl")
+        )
     return state
 
 
@@ -177,10 +181,10 @@ def main(
         val_generator,
         state,
         epochs,
+        expdir_path,
         train_loss_every,
         val_every,
     )
-    save_model_parameters(state.params, expdir_path / Path("model_parameters.pkl"))
 
 
 if __name__ == "__main__":
