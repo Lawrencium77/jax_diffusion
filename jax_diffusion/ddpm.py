@@ -1,9 +1,12 @@
 from pathlib import Path
 from typing import Tuple
 
+import fire
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.random import PRNGKey
+from PIL import Image
 
 from forward_process import calculate_alphas, get_noise_schedule
 from model import UNet, initialize_model
@@ -76,3 +79,20 @@ def ddpm(
 def get_image(checkpoint_path: Path) -> jnp.ndarray:
     model, params, batch_stats = load_model(checkpoint_path)
     return ddpm(model, params, batch_stats, NUM_TIMESTEPS)
+
+
+def save_image_as_jpeg(image_array: jnp.ndarray, file_path: str) -> None:
+    image = image_array.squeeze()  # Shape becomes (28, 28)
+    image_np = np.array(image)
+    image_pil = Image.fromarray((image_np * 255).astype(np.uint8))
+    image_pil.save(file_path, format="JPEG")
+
+
+def main(checkpoint: str) -> None:
+    checkpoint_path = Path(checkpoint)
+    image = get_image(checkpoint_path)
+    save_image_as_jpeg(image, "generated_image.jpg")
+
+
+if __name__ == "__main__":
+    fire.Fire(main)
