@@ -3,13 +3,14 @@ import jax.numpy as jnp
 import optax
 import fire
 from tqdm import tqdm
+from flax.training import train_state  # Import train_state from Flax
 
 from dataset import NumpyLoader, get_dataset
 from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
 from jax.random import PRNGKey
 from model import initialize_model
-from typing import List, Tuple
+from typing import Tuple
 from utils import (
     count_parameters,
     normalise_images,
@@ -21,10 +22,8 @@ BATCH_SIZE = 128
 NUM_TIMESTEPS = 1000
 
 
-def get_optimiser(params, learning_rate=0.0001):
-    optimiser = optax.adam(learning_rate)
-    buffers = optimiser.init(params)
-    return optimiser, buffers
+def get_optimiser(learning_rate=0.0001):
+    return optax.adam(learning_rate)
 
 
 def get_loss(
@@ -49,7 +48,7 @@ def get_loss(
 
 @jit
 def get_grads_and_loss(
-    params: List[List[jnp.ndarray]],
+    state: train_state.TrainState,
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
@@ -58,24 +57,21 @@ def get_grads_and_loss(
     Forward pass, backward pass, loss calculation.
     """
 
-    def loss_fn(p):
-        return get_loss(p, latents, noise_values, timesteps, train=True)
+    def loss_fn(params):
+        return get_loss(params, latents, noise_values, timesteps, train=True)
 
-    loss, grads = value_and_grad(loss_fn)(params)
+    loss, grads = value_and_grad(loss_fn)(state.params)
     return loss, grads
 
 
 def train_step(
     images: jnp.ndarray,
-    params: List[List[jnp.ndarray]],
-    optimiser: optax._src.base.GradientTransformationExtraArgs,
-    buffers,
-) -> Tuple[List[List[jnp.ndarray]], jnp.ndarray, jnp.ndarray]:
+    state: train_state.TrainState,
+) -> Tuple[train_state.TrainState, jnp.ndarray]:
     latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
-    loss, grads = get_grads_and_loss(params, latents, noise_values, timesteps)
-    updates, buffers = optimiser.update(grads, buffers, params)
-    new_params = optax.apply_updates(params, updates)
-    return new_params, buffers, loss
+    loss, grads = get_grads_and_loss(state, latents, noise_values, timesteps)
+    state = state.apply_gradients(grads=grads)
+    return state, loss
 
 
 @jit
@@ -89,7 +85,7 @@ def get_single_val_loss(images, params):
 
 def validate(
     val_generator: NumpyLoader,
-    params: List[List[jnp.ndarray]],
+    params: jnp.ndarray,
 ) -> float:
     total_loss = 0
     total_samples = 0
@@ -103,12 +99,10 @@ def validate(
 def execute_train_loop(
     train_generator: NumpyLoader,
     val_generator: NumpyLoader,
-    params: List[List[jnp.ndarray]],
-    optimiser: optax._src.base.GradientTransformationExtraArgs,
-    buffers,
+    state: train_state.TrainState,
     epochs: int,
     print_train_loss: bool,
-) -> List[List[jnp.ndarray]]:
+) -> train_state.TrainState:
     global ALPHAS
     ALPHAS = calculate_alphas(NUM_TIMESTEPS)
     for epoch in range(epochs):
@@ -116,12 +110,12 @@ def execute_train_loop(
         for images, _ in tqdm(train_generator):
             images = normalise_images(images)
             images = reshape_images(images)
-            params, buffers, loss = train_step(images, params, optimiser, buffers)
+            state, loss = train_step(images, state)
             if print_train_loss:
                 print(f"Training loss: {loss:.3f}")
-        val_loss = validate(val_generator, params)
+        val_loss = validate(val_generator, state.params)
         print(f"Validation loss: {val_loss * 1e3:.3f} * 10e-3")
-    return params
+    return state
 
 
 def main(
@@ -138,17 +132,19 @@ def main(
     print(
         f"Initialised model with {count_parameters(parameters) / 10 ** 6:.1f} M parameters."
     )
-    optimiser, buffers = get_optimiser(parameters)
-    parameters = execute_train_loop(
+    state = train_state.TrainState.create(
+        apply_fn=MODEL.apply,
+        params=parameters,
+        tx=get_optimiser(),
+    )
+    state = execute_train_loop(
         train_generator,
         val_generator,
-        parameters,
-        optimiser,
-        buffers,
+        state,
         epochs,
         print_train_loss,
     )
-    save_model_parameters(parameters, expdir / "model_parameters.pkl")
+    save_model_parameters(state.params, expdir / "model_parameters.pkl")
 
 
 if __name__ == "__main__":
