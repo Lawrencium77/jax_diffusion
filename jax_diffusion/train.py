@@ -41,17 +41,27 @@ def get_loss(
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
     train: bool,
-) -> Tuple[jnp.ndarray, ParamType]:
+) -> Tuple[jnp.ndarray, Optional[ParamType]]:
     """
     MSE loss with model application.
     """
-    model_outputs, updates = MODEL.apply(
-        {"params": params, "batch_stats": batch_stats},
-        latents,
-        timesteps,
-        train=train,
-        mutable=["batch_stats"] if train else False,
-    )
+    if train:
+        model_outputs, updates = MODEL.apply(
+            {"params": params, "batch_stats": batch_stats},
+            latents,
+            timesteps,
+            train=train,
+            mutable=["batch_stats"],
+        )
+    else:
+        model_outputs = MODEL.apply(
+            {"params": params, "batch_stats": batch_stats},
+            latents,
+            timesteps,
+            train=train,
+        )
+        updates = None
+
     losses = jnp.square(model_outputs - noise_values)
     loss = jnp.mean(losses)
     return loss, updates
@@ -63,12 +73,12 @@ def get_grads_and_loss(
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
-) -> Tuple[jnp.ndarray, ParamType, ParamType]:
+) -> Tuple[jnp.ndarray, ParamType, Optional[ParamType]]:
     """
     Forward pass, backward pass, loss calculation.
     """
 
-    def loss_fn(params: ParamType) -> Tuple[jnp.ndarray, ParamType]:
+    def loss_fn(params: ParamType) -> Tuple[jnp.ndarray, Optional[ParamType]]:
         loss, updates = get_loss(
             params, state.batch_stats, latents, noise_values, timesteps, train=True
         )
@@ -106,14 +116,15 @@ def get_single_val_loss(images: np.ndarray, state: TrainState) -> jnp.ndarray:
 def validate(
     val_generator: NumpyLoader,
     state: TrainState,
-) -> float:
+) -> None:
     total_loss = 0
     total_samples = 0
     for images, _ in val_generator:
         loss = get_single_val_loss(images, state)
         total_loss += loss
         total_samples += images.shape[0]
-    return total_loss / total_samples
+    val_loss = total_loss / total_samples
+    print(f"Validation loss: {val_loss * 1e3:.3f} * 10e-3")
 
 
 def execute_train_loop(
@@ -121,27 +132,30 @@ def execute_train_loop(
     val_generator: NumpyLoader,
     state: TrainState,
     epochs: int,
-    print_train_loss: bool,
+    train_loss_every: int = -1,
+    val_every: int = -1,
 ) -> TrainState:
     global ALPHAS
     ALPHAS = calculate_alphas(NUM_TIMESTEPS)
     for epoch in range(epochs):
         print(f">>>>> Epoch {epoch} <<<<<")
-        for images, _ in tqdm(train_generator):
+        for step, (images, _) in enumerate(tqdm(train_generator)):
             images = normalise_images(images)
             images = reshape_images(images)
             state, loss = train_step(images, state)
-            if print_train_loss:
+            if train_loss_every > 0 and step % train_loss_every == 0:
                 print(f"Training loss: {loss:.3f}")
-        val_loss = validate(val_generator, state)
-        print(f"Validation loss: {val_loss * 1e3:.3f} * 10e-3")
+            if val_every > 0 and step > 0 and step % val_every == 0:
+                validate(val_generator, state)
+        validate(val_generator, state)
     return state
 
 
 def main(
     expdir: Optional[str] = None,
     epochs: int = 10,
-    print_train_loss: bool = False,
+    train_loss_every: int = -1,
+    val_every: int = -1,
 ) -> None:
     if expdir is None:
         raise ValueError("Please provide an experiment directory.")
@@ -163,7 +177,8 @@ def main(
         val_generator,
         state,
         epochs,
-        print_train_loss,
+        train_loss_every,
+        val_every,
     )
     save_model_parameters(state.params, expdir_path / Path("model_parameters.pkl"))
 
