@@ -32,11 +32,17 @@ def get_loss(
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
+    train: bool,
 ) -> jnp.ndarray:
     """
     MSE loss.
     """
-    y_pred = MODEL.apply(params, latents, timesteps)
+    y_pred = MODEL.apply(
+        params,
+        latents,
+        timesteps,
+        train,
+    )
     losses = jnp.square(y_pred - noise_values)
     return jnp.mean(losses)
 
@@ -53,7 +59,7 @@ def get_grads_and_loss(
     """
 
     def loss_fn(p):
-        return get_loss(p, latents, noise_values, timesteps)
+        return get_loss(p, latents, noise_values, timesteps, train=True)
 
     loss, grads = value_and_grad(loss_fn)(params)
     return loss, grads
@@ -77,7 +83,7 @@ def get_single_val_loss(images, params):
     images = normalise_images(images)
     images = reshape_images(images)
     latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
-    loss = get_loss(params, latents, noise_values, timesteps)
+    loss = get_loss(params, latents, noise_values, timesteps, train=False)
     return loss
 
 
