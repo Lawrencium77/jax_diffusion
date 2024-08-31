@@ -1,14 +1,18 @@
 from pathlib import Path
-from typing import Dict, Union
+from typing import Any, Dict, Union
 import flax.serialization
 import jax.numpy as jnp
 import numpy as np
 
+from flax.core import FrozenDict
+
 IMAGE_NORMALISATION = 255.0
 
-NestedDict = Dict[str, Dict]
-ParamDict = Dict[str, jnp.ndarray]
-Params = Union[NestedDict, ParamDict, jnp.ndarray]
+ParamType = Union[
+    FrozenDict[str, Any],
+    Dict[str, Any],
+    jnp.ndarray,
+]
 
 
 def normalise_images(images: np.ndarray) -> jnp.ndarray:
@@ -19,24 +23,24 @@ def reshape_images(images: jnp.ndarray) -> jnp.ndarray:
     return images.reshape(-1, 28, 28, 1)
 
 
-def count_params(params: Params) -> jnp.ndarray:
+def count_params(params: ParamType) -> jnp.ndarray:
     total = jnp.array(0)
-    if isinstance(params, dict):
+    if isinstance(params, jnp.ndarray):
+        total += jnp.prod(jnp.array(params.shape))
+    else:
         for value in params.values():
             total += count_params(value)
-    else:
-        total += jnp.prod(jnp.array(params.shape))
     return total
 
 
-def save_model_parameters(parameters: NestedDict, file_path: Path) -> None:
+def save_model_parameters(parameters: ParamType, file_path: Path) -> None:
     param_bytes = flax.serialization.to_bytes(parameters)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(param_bytes)
     print(f"Saved model parameters to {file_path}")
 
 
-def load_model_parameters(file_path: Path) -> NestedDict:
+def load_model_parameters(file_path: Path) -> ParamType:
     if not file_path.exists():
         raise FileNotFoundError(f"No parameter file found at {file_path}")
 

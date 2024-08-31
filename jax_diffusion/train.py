@@ -13,7 +13,7 @@ from jax.random import PRNGKey
 from model import initialize_model
 from typing import Any, Optional, Tuple
 from utils import (
-    NestedDict,
+    ParamType,
     count_params,
     normalise_images,
     reshape_images,
@@ -35,13 +35,13 @@ def get_optimiser(
 
 
 def get_loss(
-    params: NestedDict,
-    batch_stats: NestedDict,
+    params: ParamType,
+    batch_stats: ParamType,
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
     train: bool,
-) -> Tuple[jnp.ndarray, NestedDict]:
+) -> Tuple[jnp.ndarray, ParamType]:
     """
     MSE loss with model application.
     """
@@ -63,12 +63,12 @@ def get_grads_and_loss(
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
-) -> Tuple[jnp.ndarray, NestedDict, NestedDict]:
+) -> Tuple[jnp.ndarray, ParamType, ParamType]:
     """
     Forward pass, backward pass, loss calculation.
     """
 
-    def loss_fn(params: NestedDict) -> Tuple[jnp.ndarray, NestedDict]:
+    def loss_fn(params: ParamType) -> Tuple[jnp.ndarray, ParamType]:
         loss, updates = get_loss(
             params, state.batch_stats, latents, noise_values, timesteps, train=True
         )

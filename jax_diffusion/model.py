@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from flax import linen as nn
 from jax import Array
 
-from utils import NestedDict
+from utils import ParamType
 
 
 class SinusoidalPositionalEmbeddings(nn.Module):
@@ -67,9 +67,7 @@ class UpBlock(nn.Module):
     out_channels: int
 
     @staticmethod
-    def center_crop(
-        tensor: jnp.ndarray, target_shape: Tuple[int, int, int, int]
-    ) -> jnp.ndarray:
+    def center_crop(tensor: jnp.ndarray, target_shape: Tuple[int, ...]) -> jnp.ndarray:
         """
         Crop the center of the tensor to the target_shape.
         """
@@ -134,9 +132,9 @@ class UNet(nn.Module):
 
 def initialize_model(
     key: Array,
-    input_shape: Tuple[int, int, int, int] = (1, 28, 28, 1),
+    input_shape: Tuple[int, ...] = (1, 28, 28, 1),
     num_classes: int = 1,
-) -> Tuple[UNet, NestedDict, NestedDict]:
+) -> Tuple[UNet, ParamType, ParamType]:
     model = UNet(out_channels=num_classes)
     variables = model.init(
         key,
