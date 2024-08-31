@@ -1,9 +1,14 @@
 from pathlib import Path
+from typing import Dict, Union
 import flax.serialization
 import jax.numpy as jnp
 import numpy as np
 
 IMAGE_NORMALISATION = 255.0
+
+NestedDict = Dict[str, Dict]
+ParamDict = Dict[str, jnp.ndarray]
+Params = Union[NestedDict, ParamDict, jnp.ndarray]
 
 
 def normalise_images(images: np.ndarray) -> jnp.ndarray:
@@ -14,7 +19,7 @@ def reshape_images(images: jnp.ndarray) -> jnp.ndarray:
     return images.reshape(-1, 28, 28, 1)
 
 
-def count_params(params):
+def count_params(params: Params) -> int:
     total = 0
     if isinstance(params, dict):
         for value in params.values():
@@ -24,14 +29,14 @@ def count_params(params):
     return total
 
 
-def save_model_parameters(parameters, file_path: Path):
+def save_model_parameters(parameters: NestedDict, file_path: Path) -> None:
     param_bytes = flax.serialization.to_bytes(parameters)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(param_bytes)
     print(f"Saved model parameters to {file_path}")
 
 
-def load_model_parameters(file_path: Path):
+def load_model_parameters(file_path: Path) -> NestedDict:
     if not file_path.exists():
         raise FileNotFoundError(f"No parameter file found at {file_path}")
 
