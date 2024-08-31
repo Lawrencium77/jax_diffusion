@@ -12,6 +12,7 @@ from jax.random import PRNGKey
 from model import initialize_model
 from typing import Any, Optional, Tuple
 from utils import (
+    NestedDict,
     count_params,
     normalise_images,
     reshape_images,
@@ -26,18 +27,20 @@ class TrainState(train_state.TrainState):
     batch_stats: Any
 
 
-def get_optimiser(learning_rate=0.0001):
+def get_optimiser(
+    learning_rate: float = 0.0001,
+) -> optax._src.base.GradientTransformationExtraArgs:
     return optax.adam(learning_rate)
 
 
 def get_loss(
-    params: jnp.ndarray,
-    batch_stats: jnp.ndarray,
+    params: NestedDict,
+    batch_stats: NestedDict,
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
     train: bool,
-) -> Tuple[jnp.ndarray, dict]:
+) -> Tuple[jnp.ndarray, NestedDict]:
     """
     MSE loss with model application.
     """
@@ -59,12 +62,12 @@ def get_grads_and_loss(
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
-) -> Tuple[jnp.ndarray, jnp.ndarray, dict]:
+) -> Tuple[jnp.ndarray, NestedDict, NestedDict]:
     """
     Forward pass, backward pass, loss calculation.
     """
 
-    def loss_fn(params):
+    def loss_fn(params: NestedDict) -> Tuple[jnp.ndarray, NestedDict]:
         loss, updates = get_loss(
             params, state.batch_stats, latents, noise_values, timesteps, train=True
         )
@@ -87,7 +90,7 @@ def train_step(
 
 
 @jit
-def get_single_val_loss(images, state: TrainState):
+def get_single_val_loss(images: jnp.ndarray, state: TrainState) -> jnp.ndarray:
     images = normalise_images(images)
     images = reshape_images(images)
     latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
@@ -136,7 +139,7 @@ def main(
     expdir: Optional[str] = None,
     epochs: int = 10,
     print_train_loss: bool = False,
-):
+) -> None:
     if expdir is None:
         raise ValueError("Please provide an experiment directory.")
     expdir = Path(expdir)
