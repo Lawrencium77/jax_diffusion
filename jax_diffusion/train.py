@@ -37,7 +37,7 @@ def get_loss(
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
     train: bool,
-) -> Tuple[jnp.ndarray, Optional[ParamType]]:
+) -> Tuple[jnp.ndarray, jnp.ndarray, Optional[ParamType]]:
     """
     MSE loss with model application.
     """
@@ -60,7 +60,7 @@ def get_loss(
 
     losses = jnp.square(model_outputs - noise_values)
     loss = jnp.mean(losses)
-    return loss, updates
+    return loss, model_outputs, updates
 
 
 @jit
@@ -75,7 +75,7 @@ def get_grads_and_loss(
     """
 
     def loss_fn(params: ParamType) -> Tuple[jnp.ndarray, Optional[ParamType]]:
-        loss, updates = get_loss(
+        loss, _, updates = get_loss(
             params, state.batch_stats, latents, noise_values, timesteps, train=True
         )
         return loss, updates
@@ -97,30 +97,65 @@ def train_step(
 
 
 @jit
-def get_single_val_loss(images: np.ndarray, state: TrainState) -> jnp.ndarray:
+def get_single_val_loss(
+    images: np.ndarray,
+    state: TrainState,
+) -> Tuple[
+    jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray
+]:
     images_normalised = normalise_images(images)
     images_reshaped = reshape_images(images_normalised)
     latents, noise_values, timesteps = sample_latents(
         images_reshaped, NUM_TIMESTEPS, ALPHAS
     )
-    loss, _ = get_loss(
+    loss, model_outputs, _ = get_loss(
         state.params, state.batch_stats, latents, noise_values, timesteps, train=False
     )
-    return loss
+    return loss, images_reshaped, latents, noise_values, timesteps, model_outputs
 
 
 def validate(
     val_generator: NumpyLoader,
     state: TrainState,
+    epoch: int,
+    step: int,
+    save_data: bool,
 ) -> None:
     total_loss = 0
     total_samples = 0
+    images_reshaped, latents, noise_values, timesteps, model_outputs = (
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+
     for images, _ in val_generator:
-        loss = get_single_val_loss(images, state)
+        loss, images_reshaped, latents, noise_values, timesteps, model_outputs = (
+            get_single_val_loss(images, state)
+        )
         total_loss += loss
         total_samples += images.shape[0]
+
     val_loss = total_loss / total_samples
     print(f"Validation loss: {val_loss * 1e3:.3f} * 10e-3")
+
+    if save_data:
+        if any(x is None for x in [images_reshaped, latents, noise_values, timesteps]):
+            raise ValueError("Validation data were not computed correctly.")
+
+        output_path = Path(f"validation_data_epoch_{epoch}_step_{step}.pkl")
+        save_state(
+            {
+                "images": images_reshaped,
+                "latents": latents,
+                "noise_values": noise_values,
+                "timesteps": timesteps,
+                "model_outputs": model_outputs,
+            },
+            output_path,
+        )
 
 
 def execute_train_loop(
@@ -129,6 +164,7 @@ def execute_train_loop(
     state: TrainState,
     epochs: int,
     expdir: Path,
+    save_val_outputs: bool,
     train_loss_every: int = -1,
     val_every: int = -1,
 ) -> TrainState:
@@ -143,8 +179,20 @@ def execute_train_loop(
             if train_loss_every > 0 and step % train_loss_every == 0:
                 print(f"Training loss: {loss:.3f}")
             if val_every > 0 and step > 0 and step % val_every == 0:
-                validate(val_generator, state)
-        validate(val_generator, state)
+                validate(
+                    val_generator,
+                    state,
+                    epoch,
+                    step,
+                    save_val_outputs,
+                )
+        validate(
+            val_generator,
+            state,
+            epoch,
+            -1,
+            save_val_outputs,
+        )
         save_state(state, expdir / Path(f"model_parameters_epoch_{epoch}.pkl"))
     return state
 
@@ -154,6 +202,7 @@ def main(
     epochs: int = 10,
     train_loss_every: int = -1,
     val_every: int = -1,
+    save_val_outputs: bool = False,
 ) -> None:
     if expdir is None:
         raise ValueError("Please provide an experiment directory.")
@@ -176,6 +225,7 @@ def main(
         state,
         epochs,
         expdir_path,
+        save_val_outputs,
         train_loss_every,
         val_every,
     )

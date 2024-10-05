@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import fire
 import jax
@@ -60,12 +60,17 @@ def run_ddpm(
 
 
 def ddpm(
-    model: UNet, params: ParamType, batch_stats: ParamType, num_timesteps: int
+    model: UNet,
+    params: ParamType,
+    batch_stats: ParamType,
+    num_timesteps: int,
+    key: Optional[jax.Array],
 ) -> jnp.ndarray:
     noise_schedule = get_noise_schedule(num_timesteps)
     alphas = calculate_alphas(num_timesteps)
-    prng_key = jax.random.PRNGKey(0)
-    z_T = jax.random.normal(prng_key, IMAGE_SHAPE)
+    if key is None:
+        key = jax.random.PRNGKey(0)
+    z_T = jax.random.normal(key, IMAGE_SHAPE)
     image = run_ddpm(
         model,
         params,
@@ -74,14 +79,14 @@ def ddpm(
         alphas,
         noise_schedule,
         num_timesteps,
-        prng_key,
+        key,
     )
     return image
 
 
-def get_image(checkpoint_path: Path) -> jnp.ndarray:
+def get_image(checkpoint_path: Path, key: Optional[jax.Array] = None) -> jnp.ndarray:
     model, params, batch_stats = load_model(checkpoint_path)
-    return ddpm(model, params, batch_stats, NUM_TIMESTEPS)
+    return ddpm(model, params, batch_stats, NUM_TIMESTEPS, key)
 
 
 def save_image_as_jpeg(image_array: jnp.ndarray, file_path: str) -> None:
