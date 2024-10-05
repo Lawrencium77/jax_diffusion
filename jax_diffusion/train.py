@@ -1,4 +1,5 @@
 from pathlib import Path
+import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
@@ -88,25 +89,33 @@ def get_grads_and_loss(
 def train_step(
     images: jnp.ndarray,
     state: TrainState,
-) -> Tuple[TrainState, jnp.ndarray]:
-    latents, noise_values, timesteps = sample_latents(images, NUM_TIMESTEPS, ALPHAS)
-    loss, grads, updates = get_grads_and_loss(state, latents, noise_values, timesteps)
+    rng_key: PRNGKey,
+) -> Tuple[TrainState, jnp.ndarray, PRNGKey]:
+    rng_key, key_t, key_n = jax.random.split(rng_key, 3)
+    latents, noise_values, timesteps = sample_latents(
+        images, NUM_TIMESTEPS, ALPHAS, key_t, key_n
+    )
+    loss, grads, updates = get_grads_and_loss(
+        state, latents, noise_values, timesteps
+    )
     state = state.apply_gradients(grads=grads)
     state = state.replace(batch_stats=updates["batch_stats"])
-    return state, loss
+    return state, loss, rng_key
 
 
 @jit
 def get_single_val_loss(
     images: np.ndarray,
     state: TrainState,
+    rng_key: PRNGKey,
 ) -> Tuple[
     jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray
 ]:
+    rng_key, key_t, key_n = jax.random.split(rng_key, 3)
     images_normalised = normalise_images(images)
     images_reshaped = reshape_images(images_normalised)
     latents, noise_values, timesteps = sample_latents(
-        images_reshaped, NUM_TIMESTEPS, ALPHAS
+        images_reshaped, NUM_TIMESTEPS, ALPHAS, key_t, key_n
     )
     loss, model_outputs, _ = get_loss(
         state.params, state.batch_stats, latents, noise_values, timesteps, train=False
@@ -123,6 +132,7 @@ def validate(
 ) -> None:
     total_loss = 0
     total_samples = 0
+    rng_key = jax.random.PRNGKey(42)
     images_reshaped, latents, noise_values, timesteps, model_outputs = (
         None,
         None,
@@ -132,10 +142,11 @@ def validate(
     )
 
     for images, _ in val_generator:
+        rng_key, _ = jax.random.split(rng_key)
         loss, images_reshaped, latents, noise_values, timesteps, model_outputs = (
-            get_single_val_loss(images, state)
+            get_single_val_loss(images, state, rng_key)
         )
-        total_loss += loss
+        total_loss += loss # TODO: Does this need to be multipled by images.shape[0]?
         total_samples += images.shape[0]
 
     val_loss = total_loss / total_samples
@@ -170,12 +181,13 @@ def execute_train_loop(
 ) -> TrainState:
     global ALPHAS
     ALPHAS = calculate_alphas(NUM_TIMESTEPS)
+    rng_key = jax.random.PRNGKey(0)
     for epoch in range(epochs):
         print(f">>>>> Epoch {epoch} <<<<<")
         for step, (images, _) in enumerate(tqdm(train_generator)):
             images = normalise_images(images)
             images = reshape_images(images)
-            state, loss = train_step(images, state)
+            state, loss, rng_key = train_step(images, state, rng_key)
             if train_loss_every > 0 and step % train_loss_every == 0:
                 print(f"Training loss: {loss:.3f}")
             if val_every > 0 and step > 0 and step % val_every == 0:
