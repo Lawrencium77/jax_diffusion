@@ -42,11 +42,11 @@ def run_ddpm(
     prng_key: jax.Array,
 ) -> jnp.ndarray:
     z = z_T
-    timestep_array = jnp.array([num_timesteps])
     for t in range(num_timesteps - 1, -1, -1):
         print(f"Running timestep {t}")
         alpha = alphas[t]
         beta = noise_schedule[t]
+        timestep_array = jnp.array([t])
         g = model.apply(
             {"params": params, "batch_stats": batch_stats},
             z,
