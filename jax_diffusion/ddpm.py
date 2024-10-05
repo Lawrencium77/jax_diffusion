@@ -39,7 +39,7 @@ def run_ddpm(
     alphas: jnp.ndarray,
     noise_schedule: jnp.ndarray,
     num_timesteps: int,
-    prng_key: jax.Array,
+    key: jax.Array,
 ) -> jnp.ndarray:
     z = z_T
     for t in range(num_timesteps - 1, -1, -1):
@@ -53,9 +53,9 @@ def run_ddpm(
             timestep_array,
             train=False,
         )
-        mu = calculate_mean(z, beta, alpha, g)
-        epsilon = jax.random.normal(prng_key, IMAGE_SHAPE)
-        z = mu + beta**0.5 * epsilon
+        key, subkey = jax.random.split(key)
+        epsilon = jax.random.normal(subkey, IMAGE_SHAPE)
+        z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon
     return z
 
 
