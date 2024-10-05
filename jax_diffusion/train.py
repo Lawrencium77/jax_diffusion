@@ -16,6 +16,7 @@ from utils import (
     ParamType,
     TrainState,
     count_params,
+    load_state,
     normalise_images,
     reshape_images,
     save_state,
@@ -215,6 +216,7 @@ def main(
     train_loss_every: int = -1,
     val_every: int = -1,
     save_val_outputs: bool = False,
+    checkpoint_path: Optional[str] = None,
 ) -> None:
     if expdir is None:
         raise ValueError("Please provide an experiment directory.")
@@ -225,6 +227,9 @@ def main(
     print(
         f"Initialised model with {count_params(parameters) / 10 ** 6:.1f} M parameters."
     )
+    if checkpoint_path is not None:
+        chk_state = load_state(Path(checkpoint_path))
+        parameters, batch_stats = chk_state["params"], chk_state["batch_stats"]
     state = TrainState.create(
         apply_fn=MODEL.apply,
         params=parameters,
