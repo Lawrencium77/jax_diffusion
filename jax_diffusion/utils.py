@@ -38,21 +38,19 @@ def count_params(params: ParamType) -> jnp.ndarray:
     return total
 
 
-def save_state(state: TrainState, file_path: Path) -> None:
+def save_state(state: Union[TrainState, Dict[str, Any]], file_path: Path) -> None:
     state_bytes = flax.serialization.to_bytes(state)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(state_bytes)
-    print(f"Saved model parameters to {file_path}")
+    print(f"Saved state to {file_path}")
 
 
-def load_state(file_path: Path) -> TrainState:
+def load_state(file_path: Path) -> Dict[str, Any]:
     if not file_path.exists():
         raise FileNotFoundError(f"No parameter file found at {file_path}")
 
     state_bytes = file_path.read_bytes()
     state = flax.serialization.from_bytes(None, state_bytes)
 
-    if not isinstance(state, TrainState):
-        raise RuntimeError(f"Invalid state in file {file_path}")
     print(f"Loaded state from {file_path}")
     return state

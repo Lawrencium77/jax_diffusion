@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import fire
 import jax
@@ -39,33 +39,38 @@ def run_ddpm(
     alphas: jnp.ndarray,
     noise_schedule: jnp.ndarray,
     num_timesteps: int,
-    prng_key: jax.Array,
+    key: jax.Array,
 ) -> jnp.ndarray:
     z = z_T
-    timestep_array = jnp.array([num_timesteps])
     for t in range(num_timesteps - 1, -1, -1):
         print(f"Running timestep {t}")
         alpha = alphas[t]
         beta = noise_schedule[t]
+        timestep_array = jnp.array([t])
         g = model.apply(
             {"params": params, "batch_stats": batch_stats},
             z,
             timestep_array,
             train=False,
         )
-        mu = calculate_mean(z, beta, alpha, g)
-        epsilon = jax.random.normal(prng_key, IMAGE_SHAPE)
-        z = mu + beta**0.5 * epsilon
+        key, subkey = jax.random.split(key)
+        epsilon = jax.random.normal(subkey, IMAGE_SHAPE)
+        z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon
     return z
 
 
 def ddpm(
-    model: UNet, params: ParamType, batch_stats: ParamType, num_timesteps: int
+    model: UNet,
+    params: ParamType,
+    batch_stats: ParamType,
+    num_timesteps: int,
+    key: Optional[jax.Array],
 ) -> jnp.ndarray:
     noise_schedule = get_noise_schedule(num_timesteps)
     alphas = calculate_alphas(num_timesteps)
-    prng_key = jax.random.PRNGKey(0)
-    z_T = jax.random.normal(prng_key, IMAGE_SHAPE)
+    if key is None:
+        key = jax.random.PRNGKey(0)
+    z_T = jax.random.normal(key, IMAGE_SHAPE)
     image = run_ddpm(
         model,
         params,
@@ -74,14 +79,14 @@ def ddpm(
         alphas,
         noise_schedule,
         num_timesteps,
-        prng_key,
+        key,
     )
     return image
 
 
-def get_image(checkpoint_path: Path) -> jnp.ndarray:
+def get_image(checkpoint_path: Path, key: Optional[jax.Array] = None) -> jnp.ndarray:
     model, params, batch_stats = load_model(checkpoint_path)
-    return ddpm(model, params, batch_stats, NUM_TIMESTEPS)
+    return ddpm(model, params, batch_stats, NUM_TIMESTEPS, key)
 
 
 def save_image_as_jpeg(image_array: jnp.ndarray, file_path: str) -> None:

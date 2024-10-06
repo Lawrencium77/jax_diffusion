@@ -1,3 +1,2 @@
 ### TODO:
-1. Improve timestep embeddings approach. Check it's correct.
-2. Write up code for DDPM.
+1. Continue to improve output quality. Are there more bugs, or do we just need a lower loss?
