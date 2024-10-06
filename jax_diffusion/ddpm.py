@@ -100,10 +100,10 @@ def save_image_as_jpeg(image_array: jnp.ndarray, file_path: str) -> None:
     image_pil.save(file_path, format="JPEG")
 
 
-def main(checkpoint: str) -> None:
+def main(checkpoint: str, output_path: str = "generated_image.jpg") -> None:
     checkpoint_path = Path(checkpoint)
     image = get_image(checkpoint_path)
-    save_image_as_jpeg(image, "generated_image.jpg")
+    save_image_as_jpeg(image, output_path)
 
 
 if __name__ == "__main__":
