@@ -54,8 +54,11 @@ def run_ddpm(
             train=False,
         )
         key, subkey = jax.random.split(key)
-        epsilon = jax.random.normal(subkey, IMAGE_SHAPE)
-        z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon
+        if t > 0:
+            epsilon = jax.random.normal(subkey, IMAGE_SHAPE)
+            z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon
+        else:
+            z = calculate_mean(z, beta, alpha, g)
     return z
 
 
