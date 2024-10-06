@@ -7,8 +7,6 @@ import numpy as np
 from flax.core import FrozenDict
 from flax.training import train_state
 
-IMAGE_NORMALISATION = 255.0
-
 ParamType = Union[
     FrozenDict[str, Any],
     Dict[str, Any],
@@ -20,8 +18,8 @@ class TrainState(train_state.TrainState):
     batch_stats: Any
 
 
-def normalise_images(images: np.ndarray) -> jnp.ndarray:
-    return jnp.array(images, dtype=jnp.float32) / IMAGE_NORMALISATION
+def normalise_images(images):
+    return (images / 127.5) - 1.0
 
 
 def reshape_images(images: jnp.ndarray) -> jnp.ndarray:
