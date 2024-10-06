@@ -6,7 +6,7 @@ from jax import Array
 from utils import ParamType
 
 
-class SinusoidalEmbeddings(nn.Module):
+class SinusoidalPositionalEmbeddings(nn.Module):
     embedding_dim: int
     max_period: int = 10000
 
@@ -26,18 +26,19 @@ class SinusoidalEmbeddings(nn.Module):
 
 class ConvBlock(nn.Module):
     out_channels: int
+    num_groups: int = 32
 
     @nn.compact
     def __call__(self, x: jnp.ndarray, emb: Optional[jnp.ndarray], train: bool) -> jnp.ndarray:
         h = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
-        h = nn.BatchNorm(use_running_average=not train)(h)
+        h = nn.GroupNorm(num_groups=self.num_groups)(h)
         if emb is not None:
             emb_out = nn.Dense(self.out_channels)(emb)
             emb_out = emb_out[:, None, None, :]  # Broadcast to match spatial dimensions
             h = h + emb_out
         h = nn.swish(h)
         h = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(h)
-        h = nn.BatchNorm(use_running_average=not train)(h)
+        h = nn.GroupNorm(num_groups=self.num_groups)(h)
         if emb is not None:
             emb_out = nn.Dense(self.out_channels)(emb)
             emb_out = emb_out[:, None, None, :]
@@ -49,6 +50,7 @@ class ConvBlock(nn.Module):
 class DownBlock(nn.Module):
     out_channels: int
     embedding_dim: int = 128
+    num_groups: int = 32
 
     @nn.compact
     def __call__(
@@ -56,10 +58,10 @@ class DownBlock(nn.Module):
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         emb = None
         if timesteps is not None:
-            emb = SinusoidalEmbeddings(self.embedding_dim)(timesteps)
+            emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
             emb = nn.Dense(self.embedding_dim)(emb)
             emb = nn.swish(emb)
-        conv = ConvBlock(self.out_channels)(x, emb, train)
+        conv = ConvBlock(self.out_channels, self.num_groups)(x, emb, train)
         pooled = nn.max_pool(conv, window_shape=(2, 2), strides=(2, 2), padding="SAME")
         return conv, pooled
 
@@ -67,6 +69,7 @@ class DownBlock(nn.Module):
 class UpBlock(nn.Module):
     out_channels: int
     embedding_dim: int = 128
+    num_groups: int = 32
 
     @staticmethod
     def center_crop(tensor: jnp.ndarray, target_shape: Tuple[int, ...]) -> jnp.ndarray:
@@ -91,7 +94,7 @@ class UpBlock(nn.Module):
     ) -> jnp.ndarray:
         emb = None
         if timesteps is not None:
-            emb = SinusoidalEmbeddings(self.embedding_dim)(timesteps)
+            emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
             emb = nn.Dense(self.embedding_dim)(emb)
             emb = nn.swish(emb)
         upsampled = nn.ConvTranspose(
@@ -101,29 +104,30 @@ class UpBlock(nn.Module):
             upsampled = self.center_crop(upsampled, skip.shape)
 
         concatenated = jnp.concatenate([upsampled, skip], axis=-1)
-        return ConvBlock(self.out_channels)(concatenated, emb, train)
+        return ConvBlock(self.out_channels, self.num_groups)(concatenated, emb, train)
 
 
 class UNet(nn.Module):
     out_channels: int
     embedding_dim: int = 128
+    num_groups: int = 32
 
     @nn.compact
     def __call__(
         self, x: jnp.ndarray, timesteps: jnp.ndarray, train: bool
     ) -> jnp.ndarray:
-        conv1, pool1 = DownBlock(64, self.embedding_dim)(x, train, timesteps)
-        conv2, pool2 = DownBlock(128, self.embedding_dim)(pool1, train, timesteps)
-        conv3, pool3 = DownBlock(256, self.embedding_dim)(pool2, train, timesteps)
+        conv1, pool1 = DownBlock(64, self.embedding_dim, self.num_groups)(x, train, timesteps)
+        conv2, pool2 = DownBlock(128, self.embedding_dim, self.num_groups)(pool1, train, timesteps)
+        conv3, pool3 = DownBlock(256, self.embedding_dim, self.num_groups)(pool2, train, timesteps)
 
-        emb = SinusoidalEmbeddings(self.embedding_dim)(timesteps)
+        emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
         emb = nn.Dense(self.embedding_dim)(emb)
         emb = nn.swish(emb)
-        bottleneck = ConvBlock(512)(pool3, emb, train)
+        bottleneck = ConvBlock(512, self.num_groups)(pool3, emb, train)
 
-        up3 = UpBlock(256, self.embedding_dim)(bottleneck, conv3, train, timesteps)
-        up2 = UpBlock(128, self.embedding_dim)(up3, conv2, train, timesteps)
-        up1 = UpBlock(64, self.embedding_dim)(up2, conv1, train, timesteps)
+        up3 = UpBlock(256, self.embedding_dim, self.num_groups)(bottleneck, conv3, train, timesteps)
+        up2 = UpBlock(128, self.embedding_dim, self.num_groups)(up3, conv2, train, timesteps)
+        up1 = UpBlock(64, self.embedding_dim, self.num_groups)(up2, conv1, train, timesteps)
 
         output = nn.Conv(self.out_channels, kernel_size=(1, 1), padding="SAME")(up1)
         return output
@@ -141,4 +145,4 @@ def initialize_model(
         jnp.ones(1),
         train=True,
     )
-    return model, variables["params"], variables["batch_stats"]
+    return model, variables["params"], {}
