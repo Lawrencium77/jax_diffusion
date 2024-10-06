@@ -6,22 +6,22 @@ from jax import Array
 from utils import ParamType
 
 
-class SinusoidalPositionalEmbeddings(nn.Module):
+class TimeEmbedding(nn.Module):
     embedding_dim: int
-    max_period: int = 10000
 
     @nn.compact
     def __call__(self, timesteps: jnp.ndarray) -> jnp.ndarray:
-        """
-        Compute sinusoidal embeddings for timesteps.
-        """
         half_dim = self.embedding_dim // 2
-        emb_frequencies = jnp.exp(
-            -jnp.log(self.max_period) * jnp.arange(half_dim) / (half_dim - 1)
-        )
-        angle_rads = timesteps[:, None] * emb_frequencies[None, :]
-        embeddings = jnp.concatenate([jnp.sin(angle_rads), jnp.cos(angle_rads)], axis=-1)
-        return embeddings
+        emb = jnp.log(10000) / (half_dim - 1)
+        emb = jnp.exp(jnp.arange(half_dim) * -emb)
+        emb = timesteps[:, None] * emb[None, :]
+        emb = jnp.concatenate([jnp.sin(emb), jnp.cos(emb)], axis=-1)
+
+        emb = nn.Dense(self.embedding_dim * 4)(emb)
+        emb = nn.swish(emb)
+        emb = nn.Dense(self.embedding_dim)(emb)
+        return emb
+
 
 
 class ConvBlock(nn.Module):
@@ -58,7 +58,7 @@ class DownBlock(nn.Module):
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         emb = None
         if timesteps is not None:
-            emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
+            emb = TimeEmbedding(self.embedding_dim)(timesteps)
             emb = nn.Dense(self.embedding_dim)(emb)
             emb = nn.swish(emb)
         conv = ConvBlock(self.out_channels, self.num_groups)(x, emb, train)
@@ -94,7 +94,7 @@ class UpBlock(nn.Module):
     ) -> jnp.ndarray:
         emb = None
         if timesteps is not None:
-            emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
+            emb = TimeEmbedding(self.embedding_dim)(timesteps)
             emb = nn.Dense(self.embedding_dim)(emb)
             emb = nn.swish(emb)
         upsampled = nn.ConvTranspose(
@@ -120,7 +120,7 @@ class UNet(nn.Module):
         conv2, pool2 = DownBlock(128, self.embedding_dim, self.num_groups)(pool1, train, timesteps)
         conv3, pool3 = DownBlock(256, self.embedding_dim, self.num_groups)(pool2, train, timesteps)
 
-        emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
+        emb = TimeEmbedding(self.embedding_dim)(timesteps)
         emb = nn.Dense(self.embedding_dim)(emb)
         emb = nn.swish(emb)
         bottleneck = ConvBlock(512, self.num_groups)(pool3, emb, train)
