@@ -27,7 +27,7 @@ NUM_TIMESTEPS = 1000
 
 
 def get_optimiser(
-    learning_rate: float = 0.0001,
+    learning_rate: float = 0.001,
 ) -> optax.GradientTransformation:
     return optax.adam(learning_rate)
 
