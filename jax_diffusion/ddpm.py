@@ -95,7 +95,8 @@ def get_image(checkpoint_path: Path, key: Optional[jax.Array] = None) -> jnp.nda
 def save_image_as_jpeg(image_array: jnp.ndarray, file_path: str) -> None:
     image = image_array.squeeze()
     image_np = np.array(image)
-    image_pil = Image.fromarray((image_np * 255).astype(np.uint8))
+    image_normalised = (((image_np + 1.0) / 2.0) * 255).astype(np.uint8)
+    image_pil = Image.fromarray(image_normalised)
     image_pil.save(file_path, format="JPEG")
 
 
