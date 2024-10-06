@@ -6,7 +6,7 @@ from jax import Array
 from utils import ParamType
 
 
-class SinusoidalPositionalEmbeddings(nn.Module):
+class SinusoidalEmbeddings(nn.Module):
     embedding_dim: int
     max_period: int = 10000
 
@@ -56,7 +56,7 @@ class DownBlock(nn.Module):
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         emb = None
         if timesteps is not None:
-            emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
+            emb = SinusoidalEmbeddings(self.embedding_dim)(timesteps)
             emb = nn.Dense(self.embedding_dim)(emb)
             emb = nn.swish(emb)
         conv = ConvBlock(self.out_channels)(x, emb, train)
@@ -91,7 +91,7 @@ class UpBlock(nn.Module):
     ) -> jnp.ndarray:
         emb = None
         if timesteps is not None:
-            emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
+            emb = SinusoidalEmbeddings(self.embedding_dim)(timesteps)
             emb = nn.Dense(self.embedding_dim)(emb)
             emb = nn.swish(emb)
         upsampled = nn.ConvTranspose(
@@ -116,7 +116,7 @@ class UNet(nn.Module):
         conv2, pool2 = DownBlock(128, self.embedding_dim)(pool1, train, timesteps)
         conv3, pool3 = DownBlock(256, self.embedding_dim)(pool2, train, timesteps)
 
-        emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
+        emb = SinusoidalEmbeddings(self.embedding_dim)(timesteps)
         emb = nn.Dense(self.embedding_dim)(emb)
         emb = nn.swish(emb)
         bottleneck = ConvBlock(512)(pool3, emb, train)
