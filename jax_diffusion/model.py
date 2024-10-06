@@ -1,7 +1,3 @@
-"""
-U-Net implementation. See https://arxiv.org/abs/1505.04597.
-"""
-
 from typing import Optional, Tuple
 import jax.numpy as jnp
 from flax import linen as nn
@@ -11,27 +7,20 @@ from utils import ParamType
 
 
 class SinusoidalPositionalEmbeddings(nn.Module):
-    d_model: int
+    embedding_dim: int
     max_period: int = 10000
 
     @nn.compact
     def __call__(self, timesteps: jnp.ndarray) -> jnp.ndarray:
         """
-        Sinusoidal embeddings as used in Attention is All You Need,
+        Compute sinusoidal embeddings for timesteps.
         """
-        half_dim = self.d_model // 2
-
-        emb_frequencies = jnp.log(self.max_period) / (half_dim - 1)
-        emb_frequencies = jnp.exp(jnp.arange(half_dim) * -emb_frequencies)
-
+        half_dim = self.embedding_dim // 2
+        emb_frequencies = jnp.exp(
+            -jnp.log(self.max_period) * jnp.arange(half_dim) / (half_dim - 1)
+        )
         angle_rads = timesteps[:, None] * emb_frequencies[None, :]
-
-        sin_embs = jnp.sin(angle_rads)
-        cos_embs = jnp.cos(angle_rads)
-
-        embeddings = jnp.concatenate([sin_embs, cos_embs], axis=-1)
-        height = int(self.d_model**0.5)
-        embeddings = embeddings.reshape(-1, height, height, 1)
+        embeddings = jnp.concatenate([jnp.sin(angle_rads), jnp.cos(angle_rads)], axis=-1)
         return embeddings
 
 
@@ -39,32 +28,45 @@ class ConvBlock(nn.Module):
     out_channels: int
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray, train: bool) -> jnp.ndarray:
-        x = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
-        x = nn.BatchNorm(use_running_average=not train)(x)
-        x = nn.swish(x)
-        x = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
-        x = nn.BatchNorm(use_running_average=not train)(x)
-        x = nn.swish(x)
-        return x
+    def __call__(self, x: jnp.ndarray, emb: Optional[jnp.ndarray], train: bool) -> jnp.ndarray:
+        h = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(x)
+        h = nn.BatchNorm(use_running_average=not train)(h)
+        if emb is not None:
+            emb_out = nn.Dense(self.out_channels)(emb)
+            emb_out = emb_out[:, None, None, :]  # Broadcast to match spatial dimensions
+            h = h + emb_out
+        h = nn.swish(h)
+        h = nn.Conv(features=self.out_channels, kernel_size=(3, 3), padding="SAME")(h)
+        h = nn.BatchNorm(use_running_average=not train)(h)
+        if emb is not None:
+            emb_out = nn.Dense(self.out_channels)(emb)
+            emb_out = emb_out[:, None, None, :]
+            h = h + emb_out
+        h = nn.swish(h)
+        return h
 
 
 class DownBlock(nn.Module):
     out_channels: int
+    embedding_dim: int = 128
 
     @nn.compact
     def __call__(
         self, x: jnp.ndarray, train: bool, timesteps: Optional[jnp.ndarray] = None
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        emb = None
         if timesteps is not None:
-            x += SinusoidalPositionalEmbeddings(x.shape[1] ** 2)(timesteps)
-        conv = ConvBlock(self.out_channels)(x, train)
+            emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
+            emb = nn.Dense(self.embedding_dim)(emb)
+            emb = nn.swish(emb)
+        conv = ConvBlock(self.out_channels)(x, emb, train)
         pooled = nn.max_pool(conv, window_shape=(2, 2), strides=(2, 2), padding="SAME")
         return conv, pooled
 
 
 class UpBlock(nn.Module):
     out_channels: int
+    embedding_dim: int = 128
 
     @staticmethod
     def center_crop(tensor: jnp.ndarray, target_shape: Tuple[int, ...]) -> jnp.ndarray:
@@ -87,11 +89,11 @@ class UpBlock(nn.Module):
         train: bool,
         timesteps: Optional[jnp.ndarray] = None,
     ) -> jnp.ndarray:
-        """
-        Note that we crop the upsampled tensor, not the skip tensor.
-        """
+        emb = None
         if timesteps is not None:
-            x += SinusoidalPositionalEmbeddings(x.shape[1] ** 2)(timesteps)
+            emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
+            emb = nn.Dense(self.embedding_dim)(emb)
+            emb = nn.swish(emb)
         upsampled = nn.ConvTranspose(
             features=self.out_channels, kernel_size=(2, 2), strides=(2, 2)
         )(x)
@@ -99,32 +101,29 @@ class UpBlock(nn.Module):
             upsampled = self.center_crop(upsampled, skip.shape)
 
         concatenated = jnp.concatenate([upsampled, skip], axis=-1)
-        return ConvBlock(self.out_channels)(concatenated, train)
+        return ConvBlock(self.out_channels)(concatenated, emb, train)
 
 
 class UNet(nn.Module):
     out_channels: int
+    embedding_dim: int = 128
 
     @nn.compact
     def __call__(
         self, x: jnp.ndarray, timesteps: jnp.ndarray, train: bool
     ) -> jnp.ndarray:
-        conv1, pool1 = DownBlock(64)(x, train, timesteps)
-        conv2, pool2 = DownBlock(128)(pool1, train, timesteps)
-        conv3, pool3 = DownBlock(256)(
-            pool2,
-            train=train,
-        )  # Non-even feat dim so don't apply timestep embeddings
+        conv1, pool1 = DownBlock(64, self.embedding_dim)(x, train, timesteps)
+        conv2, pool2 = DownBlock(128, self.embedding_dim)(pool1, train, timesteps)
+        conv3, pool3 = DownBlock(256, self.embedding_dim)(pool2, train, timesteps)
 
-        bottleneck = ConvBlock(512)(pool3, train)
+        emb = SinusoidalPositionalEmbeddings(self.embedding_dim)(timesteps)
+        emb = nn.Dense(self.embedding_dim)(emb)
+        emb = nn.swish(emb)
+        bottleneck = ConvBlock(512)(pool3, emb, train)
 
-        up3 = UpBlock(256)(bottleneck, conv3, train, timesteps)
-        up2 = UpBlock(128)(
-            up3,
-            conv2,
-            train,
-        )  # Non-even feat dim so don't apply timestep embeddings
-        up1 = UpBlock(64)(up2, conv1, train, timesteps)
+        up3 = UpBlock(256, self.embedding_dim)(bottleneck, conv3, train, timesteps)
+        up2 = UpBlock(128, self.embedding_dim)(up3, conv2, train, timesteps)
+        up1 = UpBlock(64, self.embedding_dim)(up2, conv1, train, timesteps)
 
         output = nn.Conv(self.out_channels, kernel_size=(1, 1), padding="SAME")(up1)
         return output
