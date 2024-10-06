@@ -86,6 +86,7 @@ class ResAttnBlock(nn.Module):
 
 class DownBlock(nn.Module):
     out_channels: int
+    embedding_dim: int
     num_groups: int = 32
 
     @nn.compact
@@ -152,9 +153,9 @@ class UNet(nn.Module):
     def __call__(
         self, x: jnp.ndarray, timesteps: jnp.ndarray, train: bool
     ) -> jnp.ndarray:
-        conv1, pool1 = DownBlock(64, self.num_groups)(x, train, timesteps)
-        conv2, pool2 = DownBlock(128, self.num_groups)(pool1, train, timesteps)
-        conv3, pool3 = DownBlock(256, self.num_groups)(pool2, train, timesteps)
+        conv1, pool1 = DownBlock(64, self.embedding_dim, self.num_groups)(x, train, timesteps)
+        conv2, pool2 = DownBlock(128, self.embedding_dim, self.num_groups)(pool1, train, timesteps)
+        conv3, pool3 = DownBlock(256, self.embedding_dim, self.num_groups)(pool2, train, timesteps)
 
         emb = TimeEmbedding(self.embedding_dim)(timesteps)
         emb = nn.Dense(self.embedding_dim)(emb)
