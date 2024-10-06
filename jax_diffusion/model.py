@@ -21,7 +21,27 @@ class TimeEmbedding(nn.Module):
         emb = nn.swish(emb)
         emb = nn.Dense(self.embedding_dim)(emb)
         return emb
+    
+class AttentionBlock(nn.Module):
+    num_heads: int
+    num_groups: int = 32
+    embedding_dim: Optional[int] = None
 
+    @nn.compact
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        batch, height, width, channels = x.shape
+        h = nn.GroupNorm(num_groups=self.num_groups)(x)
+        h = h.reshape(batch, height * width, channels)
+        h = nn.SelfAttention(
+            num_heads=self.num_heads,
+            qkv_features=self.embedding_dim if self.embedding_dim else channels,
+            out_features=channels,
+            use_bias=True,
+            dtype=x.dtype,
+        )(h)
+
+        h = h.reshape(batch, height, width, channels)
+        return x + h
 
 
 class ConvBlock(nn.Module):
@@ -45,11 +65,27 @@ class ConvBlock(nn.Module):
             h = h + emb_out
         h = nn.swish(h)
         return h
+class ResAttnBlock(nn.Module):
+    out_channels: int
+    embedding_dim: int = 128
+    num_heads: int = 8
+    num_groups: int = 32
+    add_attention: bool = True
+
+    @nn.compact
+    def __call__(self, x: jnp.ndarray, emb: Optional[jnp.ndarray], train: bool) -> jnp.ndarray:
+        h = ConvBlock(self.out_channels, self.num_groups)(x, emb, train)
+        if self.add_attention:
+            h = AttentionBlock(
+                num_heads=self.num_heads,
+                num_groups=self.num_groups,
+                embedding_dim=self.embedding_dim,
+            )(h)
+        return h
 
 
 class DownBlock(nn.Module):
     out_channels: int
-    embedding_dim: int = 128
     num_groups: int = 32
 
     @nn.compact
@@ -61,7 +97,7 @@ class DownBlock(nn.Module):
             emb = TimeEmbedding(self.embedding_dim)(timesteps)
             emb = nn.Dense(self.embedding_dim)(emb)
             emb = nn.swish(emb)
-        conv = ConvBlock(self.out_channels, self.num_groups)(x, emb, train)
+        conv = ResAttnBlock(self.out_channels, self.num_groups)(x, emb, train)
         pooled = nn.max_pool(conv, window_shape=(2, 2), strides=(2, 2), padding="SAME")
         return conv, pooled
 
@@ -104,7 +140,7 @@ class UpBlock(nn.Module):
             upsampled = self.center_crop(upsampled, skip.shape)
 
         concatenated = jnp.concatenate([upsampled, skip], axis=-1)
-        return ConvBlock(self.out_channels, self.num_groups)(concatenated, emb, train)
+        return ResAttnBlock(self.out_channels, self.num_groups)(concatenated, emb, train)
 
 
 class UNet(nn.Module):
@@ -116,9 +152,9 @@ class UNet(nn.Module):
     def __call__(
         self, x: jnp.ndarray, timesteps: jnp.ndarray, train: bool
     ) -> jnp.ndarray:
-        conv1, pool1 = DownBlock(64, self.embedding_dim, self.num_groups)(x, train, timesteps)
-        conv2, pool2 = DownBlock(128, self.embedding_dim, self.num_groups)(pool1, train, timesteps)
-        conv3, pool3 = DownBlock(256, self.embedding_dim, self.num_groups)(pool2, train, timesteps)
+        conv1, pool1 = DownBlock(64, self.num_groups)(x, train, timesteps)
+        conv2, pool2 = DownBlock(128, self.num_groups)(pool1, train, timesteps)
+        conv3, pool3 = DownBlock(256, self.num_groups)(pool2, train, timesteps)
 
         emb = TimeEmbedding(self.embedding_dim)(timesteps)
         emb = nn.Dense(self.embedding_dim)(emb)
