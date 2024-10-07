@@ -1,3 +1,9 @@
+"""
+TODO:
+- Implement SelfAttention.
+- Implement residual connections.
+- Consider other flags in the reference implementation.
+"""
 from typing import Optional, Tuple
 import jax.numpy as jnp
 from flax import linen as nn
