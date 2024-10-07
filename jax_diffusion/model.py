@@ -40,9 +40,11 @@ class PositionalEncoding(nn.Module):
 class DoubleConv(nn.Module):
     in_channels: int
     out_channels: int
+    residual: bool = False
 
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        residual = x
         x = nn.Conv(
             features=self.out_channels,
             kernel_size=(3, 3),
@@ -60,6 +62,8 @@ class DoubleConv(nn.Module):
             use_bias=False
         )(x)
         x = nn.GroupNorm(num_groups=1)(x)
+        if self.residual:
+            x = nn.gelu(x + residual)
         return x
     
 class SelfAttention(nn.Module):
@@ -78,7 +82,7 @@ class DownBlock(nn.Module):
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2), padding = "SAME") # Requires shape [N, H, W, C]
-        x = DoubleConv(self.in_channels, self.in_channels)(x)   
+        x = DoubleConv(self.in_channels, self.in_channels, True)(x)   
         x = DoubleConv(self.in_channels, self.out_channels)(x)
         return x
 
@@ -99,7 +103,7 @@ class UpBlock(nn.Module):
             ), 
             method="bilinear",
         )
-        x = DoubleConv(self.in_channels, self.in_channels)(x)
+        x = DoubleConv(self.in_channels, self.in_channels, True)(x)
         x = DoubleConv(self.in_channels, self.out_channels)(x)
         return x
     
