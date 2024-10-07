@@ -4,7 +4,7 @@ TODO:
 - Implement residual connections.
 - Consider other flags in the reference implementation.
 """
-from typing import Optional, Tuple
+from typing import Tuple
 import jax.numpy as jnp
 from flax import linen as nn
 from jax import Array, image
@@ -92,17 +92,18 @@ class UpBlock(nn.Module):
     out_channels: int
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
-        x = image.resize(
-            x, 
+    def __call__(self, x1: jnp.ndarray, x2: jnp.ndarray) -> jnp.ndarray:
+        x1 = image.resize(
+            x1, 
             shape = (
-                x.shape[0], 
-                x.shape[1] * 2, 
-                x.shape[2] * 2, 
-                x.shape[3],
+                x1.shape[0], 
+                x1.shape[1] * 2, 
+                x1.shape[2] * 2, 
+                x1.shape[3],
             ), 
             method="bilinear",
         )
+        x = jnp.concatenate([x1, x2], axis=-1)
         x = DoubleConv(self.in_channels, self.in_channels, True)(x)
         x = DoubleConv(self.in_channels, self.out_channels)(x)
         return x
@@ -135,10 +136,10 @@ class UNet(nn.Module):
         x1 = DoubleConv(1, 64)(x) # [bsz, 32, 32, 64]
         x2 = DownBlock(64, 128)(x1) + PositionalEncoding(128, 16)(timesteps) # [bsz, 16, 16, 128]
         x3 = DownBlock(128, 256)(x2) + PositionalEncoding(256, 8)(timesteps) # [bsz, 8, 8, 256]
-        x4 = DownBlock(256, 512)(x3) + PositionalEncoding(512, 4)(timesteps) # [bsz, 4, 4, 512]
-        x = UpBlock(512, 256)(x4) + PositionalEncoding(256, 8)(timesteps) # [bsz, 8, 8, 256]
-        x = UpBlock(256, 128)(x) + PositionalEncoding(128, 16)(timesteps) # [bsz, 16, 16, 128]
-        x = UpBlock(128, 64)(x) + PositionalEncoding(64, 32)(timesteps) # [bsz, 32, 32, 64]
+        x4 = DownBlock(256, 256)(x3) + PositionalEncoding(256, 4)(timesteps) # [bsz, 4, 4, 256]
+        x = UpBlock(512, 128)(x4, x3) + PositionalEncoding(128, 8)(timesteps) # [bsz, 8, 8, 128]
+        x = UpBlock(256, 64)(x, x2) + PositionalEncoding(64, 16)(timesteps) # [bsz, 16, 16, 64]
+        x = UpBlock(128, 64)(x, x1) + PositionalEncoding(64, 32)(timesteps) # [bsz, 32, 32, 64]
         output = OutConv(64, 1)(x) # [bsz, 32, 32, 1]
         return output
 
