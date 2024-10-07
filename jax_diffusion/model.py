@@ -1,9 +1,3 @@
-"""
-TODO:
-- Implement SelfAttention.
-- Implement residual connections.
-- Consider other flags in the reference implementation.
-"""
 from typing import Tuple
 import jax.numpy as jnp
 from flax import linen as nn
@@ -67,12 +61,39 @@ class DoubleConv(nn.Module):
         return x
     
 class SelfAttention(nn.Module):
-    head_size: int
-    num_segments: int
+    feat_dim: int
 
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
-        raise NotImplementedError
+        # x: [batch_size, seq_len, feat_dim]
+        x_ln = nn.LayerNorm()(x)
+        attention_value = nn.MultiHeadDotProductAttention(
+            num_heads=4,
+            qkv_features=self.feat_dim,
+            out_features=self.feat_dim,
+            dropout_rate=0.0,
+            deterministic=True
+        )(x_ln, x_ln, x_ln)
+        attention_value = attention_value + x
+        y = nn.LayerNorm()(attention_value)
+        y = nn.Dense(features=self.feat_dim)(y)
+        y = nn.gelu(y)
+        y = nn.Dense(features=self.feat_dim)(y)
+        attention_output = y + attention_value
+        return attention_output
+    
+class SAWrapper(nn.Module):
+    num_channels: int
+    image_width: int
+
+    @nn.compact
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        # x: [batch_size, height, width, channels] (JAX default)
+        batch_size = x.shape[0]
+        x = x.reshape(batch_size, self.image_width * self.image_width, self.num_channels)
+        x = SelfAttention(feat_dim=self.num_channels)(x)
+        x = x.reshape(batch_size, self.image_width, self.image_width, self.num_channels)
+        return x
 
 
 class DownBlock(nn.Module):
@@ -136,8 +157,11 @@ class UNet(nn.Module):
         x1 = DoubleConv(1, 64)(x) # [bsz, 32, 32, 64]
         x2 = DownBlock(64, 128)(x1) + PositionalEncoding(128, 16)(timesteps) # [bsz, 16, 16, 128]
         x3 = DownBlock(128, 256)(x2) + PositionalEncoding(256, 8)(timesteps) # [bsz, 8, 8, 256]
+        x3 = SAWrapper(256, 8)(x3)
         x4 = DownBlock(256, 256)(x3) + PositionalEncoding(256, 4)(timesteps) # [bsz, 4, 4, 256]
+        x4 = SAWrapper(256, 4)(x4)
         x = UpBlock(512, 128)(x4, x3) + PositionalEncoding(128, 8)(timesteps) # [bsz, 8, 8, 128]
+        x = SAWrapper(128, 8)(x)
         x = UpBlock(256, 64)(x, x2) + PositionalEncoding(64, 16)(timesteps) # [bsz, 16, 16, 64]
         x = UpBlock(128, 64)(x, x1) + PositionalEncoding(64, 32)(timesteps) # [bsz, 32, 32, 64]
         output = OutConv(64, 1)(x) # [bsz, 32, 32, 1]
