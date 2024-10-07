@@ -7,7 +7,6 @@ from torchvision.datasets import MNIST
 from torch.utils.data import random_split, Sampler, Dataset
 from PIL.Image import Image
 
-
 def numpy_collate(batch: List[Tuple[np.ndarray, int]]) -> List[np.ndarray]:
     return tree_map(np.asarray, data.default_collate(batch))
 
@@ -40,17 +39,20 @@ class NumpyLoader(data.DataLoader):
             worker_init_fn=worker_init_fn,
         )
 
+class ResizeFlattenAndCast(object):
+    def __init__(self, size=(32, 32)):
+        self.size = size
 
-class FlattenAndCast(object):
     def __call__(self, pic: Image) -> np.ndarray:
+        pic = pic.resize(self.size)
         return np.ravel(np.array(pic, dtype=jnp.float32))
-
 
 def get_dataset(
     batch_size: int,
     val_split: float = 0.2,
 ) -> Tuple[NumpyLoader, NumpyLoader]:
-    mnist_dataset = MNIST("/tmp/mnist/", download=True, transform=FlattenAndCast())
+    transform = ResizeFlattenAndCast()
+    mnist_dataset = MNIST("/tmp/mnist/", download=True, transform=transform)
 
     val_size = int(len(mnist_dataset) * val_split)
     train_size = len(mnist_dataset) - val_size

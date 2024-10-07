@@ -23,7 +23,7 @@ def normalise_images(images):
 
 
 def reshape_images(images: jnp.ndarray) -> jnp.ndarray:
-    return images.reshape(-1, 28, 28, 1)
+    return images.reshape(-1, 32, 32, 1)
 
 
 def count_params(params: ParamType) -> jnp.ndarray:

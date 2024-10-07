@@ -13,7 +13,7 @@ from model import UNet, initialize_model
 from utils import load_state, ParamType
 from train import NUM_TIMESTEPS
 
-IMAGE_SHAPE = (1, 28, 28, 1)
+IMAGE_SHAPE = (1, 32, 32, 1)
 
 
 def load_model(checkpoint_path: Path) -> Tuple[UNet, ParamType, ParamType]:
