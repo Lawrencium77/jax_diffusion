@@ -113,15 +113,15 @@ def get_single_val_loss(
     jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray
 ]:
     rng_key, key_t, key_n = jax.random.split(rng_key, 3)
-    images_normalised = normalise_images(images)
-    images_reshaped = reshape_images(images_normalised)
+    images = reshape_images(images)
+    images = normalise_images(images)
     latents, noise_values, timesteps = sample_latents(
-        images_reshaped, NUM_TIMESTEPS, ALPHAS, key_t, key_n
+        images, NUM_TIMESTEPS, ALPHAS, key_t, key_n
     )
     loss, model_outputs, _ = get_loss(
         state.params, state.batch_stats, latents, noise_values, timesteps, train=False
     )
-    return loss, images_reshaped, latents, noise_values, timesteps, model_outputs
+    return loss, images, latents, noise_values, timesteps, model_outputs
 
 
 def validate(
@@ -186,8 +186,8 @@ def execute_train_loop(
     for epoch in range(epochs):
         print(f">>>>> Epoch {epoch} <<<<<")
         for step, (images, _) in enumerate(tqdm(train_generator)):
-            images = normalise_images(images)
             images = reshape_images(images)
+            images = normalise_images(images)
             state, loss, rng_key = train_step(images, state, rng_key)
             if train_loss_every > 0 and step % train_loss_every == 0:
                 print(f"Training loss: {loss:.3f}")
