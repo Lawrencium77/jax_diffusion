@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.random import PRNGKey
 from PIL import Image
+from tqdm import tqdm
 
 from forward_process import calculate_alphas, get_noise_schedule
 from model import UNet, initialize_model
@@ -42,8 +43,7 @@ def run_ddpm(
     key: jax.Array,
 ) -> jnp.ndarray:
     z = z_T
-    for t in range(num_timesteps - 1, -1, -1):
-        print(f"Running timestep {t}")
+    for t in tqdm(range(num_timesteps - 1, -1, -1)):
         alpha = alphas[t]
         beta = noise_schedule[t]
         timestep_array = jnp.array([t])
