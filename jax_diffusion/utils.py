@@ -22,7 +22,7 @@ def normalise_images(images):
     return (images / 127.5) - 1.0
 
 
-def reshape_images(images: jnp.ndarray) -> jnp.ndarray:
+def reshape_images(images: np.ndarray) -> np.ndarray:
     return images.reshape(-1, 32, 32, 1)
 
 
