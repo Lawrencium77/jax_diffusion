@@ -1,4 +1,8 @@
-from typing import Tuple
+"""
+TODO:
+    * Double check LN in SA layer.
+"""
+from typing import Optional, Tuple
 import jax.numpy as jnp
 from flax import linen as nn
 from jax import Array, image
@@ -34,13 +38,15 @@ class PositionalEncoding(nn.Module):
 class DoubleConv(nn.Module):
     in_channels: int
     out_channels: int
+    mid_channels: Optional[int] = None
     residual: bool = False
 
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        mid_channels = self.mid_channels or self.out_channels
         residual = x
         x = nn.Conv(
-            features=self.out_channels,
+            features=mid_channels,
             kernel_size=(3, 3),
             strides=(1, 1),
             padding='SAME',
@@ -103,7 +109,7 @@ class DownBlock(nn.Module):
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2), padding = "SAME") # Requires shape [N, H, W, C]
-        x = DoubleConv(self.in_channels, self.in_channels, True)(x)   
+        x = DoubleConv(self.in_channels, self.in_channels, residual=True)(x)   
         x = DoubleConv(self.in_channels, self.out_channels)(x)
         return x
 
@@ -125,8 +131,8 @@ class UpBlock(nn.Module):
             method="bilinear",
         )
         x = jnp.concatenate([x1, x2], axis=-1)
-        x = DoubleConv(self.in_channels, self.in_channels, True)(x)
-        x = DoubleConv(self.in_channels, self.out_channels)(x)
+        x = DoubleConv(self.in_channels, self.in_channels, residual=True)(x)
+        x = DoubleConv(self.in_channels, self.out_channels, self.in_channels // 2)(x)
         return x
     
 class OutConv(nn.Module):
