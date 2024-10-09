@@ -1,7 +1,3 @@
-"""
-TODO:
-    * Double check LN in SA layer.
-"""
 from typing import Optional, Tuple
 import jax.numpy as jnp
 from flax import linen as nn
@@ -52,7 +48,7 @@ class DoubleConv(nn.Module):
             padding='SAME',
             use_bias=False
         )(x)
-        x = nn.GroupNorm(num_groups=1)(x)
+        x = nn.GroupNorm(num_groups=32)(x)
         x = nn.gelu(x)
         x = nn.Conv(
             features=self.out_channels,
@@ -61,7 +57,7 @@ class DoubleConv(nn.Module):
             padding='SAME',
             use_bias=False
         )(x)
-        x = nn.GroupNorm(num_groups=1)(x)
+        x = nn.GroupNorm(num_groups=32)(x)
         if self.residual:
             x = nn.gelu(x + residual)
         return x
@@ -153,7 +149,6 @@ class OutConv(nn.Module):
 class UNet(nn.Module):
     out_channels: int
     embedding_dim: int = 128
-    num_groups: int = 32
 
     @nn.compact
     def __call__(
