@@ -1,4 +1,7 @@
 .venv/
+.vscode/
+checkpoints/
+*.ipynb
 __pycache__/
 .ruff_cache/
 pyrightconfig.json
