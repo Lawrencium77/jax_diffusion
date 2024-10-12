@@ -11,9 +11,8 @@ from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
 from jax.random import PRNGKey
 from model import initialize_model
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 from utils import (
-    ParamType,
     TrainState,
     count_params,
     load_state,
@@ -33,13 +32,13 @@ def get_optimiser(
 
 
 def get_loss(
-    params: ParamType,
-    batch_stats: ParamType,
+    params,
+    batch_stats,
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
     train: bool,
-) -> Tuple[jnp.ndarray, jnp.ndarray, Optional[ParamType]]:
+) -> Tuple[jnp.ndarray, jnp.ndarray, Optional[Any]]:
     """
     MSE loss with model application.
     """
@@ -71,12 +70,12 @@ def get_grads_and_loss(
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
-) -> Tuple[jnp.ndarray, ParamType, Optional[ParamType]]:
+) -> Tuple[jnp.ndarray, Any, Optional[Any]]:
     """
     Forward pass, backward pass, loss calculation.
     """
 
-    def loss_fn(params: ParamType) -> Tuple[jnp.ndarray, Optional[ParamType]]:
+    def loss_fn(params: Any) -> Tuple[jnp.ndarray, Optional[Any]]:
         loss, _, updates = get_loss(
             params, state.batch_stats, latents, noise_values, timesteps, train=True
         )

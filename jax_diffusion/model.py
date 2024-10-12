@@ -1,9 +1,9 @@
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 import jax.numpy as jnp
 from flax import linen as nn
 from jax import Array, image
 
-from utils import ParamType, SPATIAL_DIM, NUM_CHANNELS
+from utils import SPATIAL_DIM, NUM_CHANNELS
 
 
 class PositionalEncoding(nn.Module):
@@ -192,7 +192,7 @@ def initialize_model(
     key: Array,
     input_shape: Tuple[int, ...] = (1, SPATIAL_DIM, SPATIAL_DIM, NUM_CHANNELS),
     num_classes: int = 1,
-) -> Tuple[UNet, ParamType, ParamType]:
+) -> Tuple[UNet, Any, Any]:
     model = UNet(out_channels=num_classes)
     variables = model.init(
         key,

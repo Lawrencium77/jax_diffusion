@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import fire
 import jax
@@ -11,11 +11,11 @@ from tqdm import tqdm
 
 from forward_process import calculate_alphas, get_noise_schedule
 from model import UNet, initialize_model
-from utils import load_state, ParamType, SPATIAL_DIM, NUM_CHANNELS
+from utils import load_state, SPATIAL_DIM, NUM_CHANNELS
 from train import NUM_TIMESTEPS
 
 
-def load_model(checkpoint_path: Path) -> Tuple[UNet, ParamType, ParamType]:
+def load_model(checkpoint_path: Path) -> Tuple[UNet, Any, Any]:
     state = load_state(checkpoint_path)
     model, _, _ = initialize_model(PRNGKey(0))
     parameters, batch_stats = state["params"], state["batch_stats"]
@@ -32,8 +32,8 @@ def calculate_mean(
 
 def run_ddpm(
     model: UNet,
-    params: ParamType,
-    batch_stats: ParamType,
+    params,
+    batch_stats,
     z_T: jnp.ndarray,
     alphas: jnp.ndarray,
     noise_schedule: jnp.ndarray,
@@ -63,8 +63,8 @@ def run_ddpm(
 
 def ddpm(
     model: UNet,
-    params: ParamType,
-    batch_stats: ParamType,
+    params,
+    batch_stats,
     num_timesteps: int,
     num_images: int,
     key: Optional[jax.Array],

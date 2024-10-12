@@ -4,14 +4,7 @@ import flax.serialization
 import jax.numpy as jnp
 import numpy as np
 
-from flax.core import FrozenDict
 from flax.training import train_state
-
-ParamType = Union[
-    FrozenDict[str, Any],
-    Dict[str, Any],
-    jnp.ndarray,
-]
 
 SPATIAL_DIM = 32  # dataset.py resizes from 28 x 28
 NUM_CHANNELS = 1
@@ -29,7 +22,7 @@ def reshape_images(images: np.ndarray) -> np.ndarray:
     return images.reshape(-1, SPATIAL_DIM, SPATIAL_DIM, NUM_CHANNELS)
 
 
-def count_params(params: ParamType) -> jnp.ndarray:
+def count_params(params) -> jnp.ndarray:
     total = jnp.array(0)
     if isinstance(params, jnp.ndarray):
         total += jnp.prod(jnp.array(params.shape))
