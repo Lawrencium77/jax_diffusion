@@ -161,11 +161,9 @@ class UNet(nn.Module):
     def __call__(
         self, x: jnp.ndarray, timesteps: jnp.ndarray, train: bool
     ) -> jnp.ndarray:
-        # x has shape [bsz, 32, 32, 1]
+        # x: [bsz, SPATIAL_DIM, SPATIAL_DIM, 1]
         x1 = DoubleConv(1, 64)(x)  # [bsz, 32, 32, 64]
-        x2 = DownBlock(64, 128)(x1) + PositionalEncoding(128, 16)(
-            timesteps
-        )  # [bsz, 16, 16, 128]
+        x2 = DownBlock(64, 128)(x1) + PositionalEncoding(128, 16)(timesteps)
         x3 = DownBlock(128, 256)(x2) + PositionalEncoding(256, 8)(
             timesteps
         )  # [bsz, 8, 8, 256]
