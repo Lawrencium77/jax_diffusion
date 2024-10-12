@@ -43,7 +43,7 @@ class NumpyLoader(data.DataLoader):
         )
 
 
-class ResizeFlattenAndCast(object):
+class ResizeAndCast(object):
     def __init__(self, size=(SPATIAL_DIM, SPATIAL_DIM)):
         self.size = size
 
@@ -53,10 +53,9 @@ class ResizeFlattenAndCast(object):
 
 
 def get_dataset(
-    batch_size: int,
-    val_split: float = 0.2,
+    batch_size: int, val_split: float = 0.2
 ) -> Tuple[NumpyLoader, NumpyLoader]:
-    transform = ResizeFlattenAndCast()
+    transform = ResizeAndCast()
     mnist_dataset = MNIST("/tmp/mnist/", download=True, transform=transform)
 
     val_size = int(len(mnist_dataset) * val_split)
@@ -64,10 +63,7 @@ def get_dataset(
 
     train_dataset, val_dataset = random_split(mnist_dataset, [train_size, val_size])
 
-    train_loader = NumpyLoader(
-        train_dataset, batch_size=batch_size, num_workers=0, shuffle=True
-    )
-    val_loader = NumpyLoader(
-        val_dataset, batch_size=batch_size, num_workers=0, shuffle=False
-    )
+    train_loader = NumpyLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = NumpyLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
     return train_loader, val_loader
