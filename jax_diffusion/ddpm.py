@@ -41,6 +41,7 @@ def run_ddpm(
     save_images_every: int,
     output_dir: Path,
 ) -> jnp.ndarray:
+    save_images(z, output_dir, NUM_TIMESTEPS)
     num_timesteps = len(alphas)
     for t in tqdm(reversed(range(num_timesteps))):
         alpha = alphas[t]
@@ -119,7 +120,7 @@ def main(
     output_dir: str = "output",
 ) -> None:
     output_dir_path = Path(output_dir)
-    output_dir_path.mkdir(parents=True, exist_ok=True)
+    output_dir_path.mkdir(parents=True, exist_ok=False)
     generate_images(
         Path(checkpoint), num_images, PRNGKey(key), save_images_every, output_dir_path
     )
