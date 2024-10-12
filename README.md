@@ -1,6 +1,6 @@
 # JAX Diffusion
 
-This is a toy project that implements a [Denoising Diffusion Probabilistic Model (DDPM)](https://arxiv.org/pdf/2006.11239) in JAX, using MNIST.
+This is a toy project that implements a [DDPM](https://arxiv.org/pdf/2006.11239) in JAX, using MNIST.
 
 ## Setup
 
