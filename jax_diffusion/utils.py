@@ -31,12 +31,11 @@ def save_state(state: Union[TrainState, Dict[str, Any]], file_path: Path) -> Non
     print(f"Saved state to {file_path}")
 
 
-def load_state(file_path: Path) -> Dict[str, Any]:
+def load_parameters(file_path: Path) -> Dict[str, Any]:
     if not file_path.exists():
         raise FileNotFoundError(f"No parameter file found at {file_path}")
 
     state_bytes = file_path.read_bytes()
     state = flax.serialization.from_bytes(None, state_bytes)
-
-    print(f"Loaded state from {file_path}")
-    return state
+    print(f"Loaded parameters from {file_path}")
+    return state["params"]

@@ -1,4 +1,4 @@
-from functools import partial  # Import partial
+from functools import partial
 from pathlib import Path
 import jax
 import jax.numpy as jnp
@@ -11,11 +11,12 @@ from dataset import NumpyLoader, get_dataset
 from flax.training.train_state import TrainState
 from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
+from jax.random import PRNGKey
 from model import UNet, initialize_model
 from typing import Any, Optional, Tuple
 from utils import (
     count_params,
-    load_state,
+    load_parameters,
     normalise_images,
     reshape_images,
     save_state,
@@ -37,7 +38,7 @@ def get_loss(
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
     model: UNet,
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+) -> jnp.ndarray:
     model_outputs = model.apply(
         {"params": params},
         latents,
@@ -46,8 +47,7 @@ def get_loss(
     if not isinstance(model_outputs, jnp.ndarray):
         raise ValueError("Model output is not a jnp.ndarray")
     losses = jnp.square(model_outputs - noise_values)
-    loss = jnp.mean(losses)
-    return loss, model_outputs
+    return jnp.mean(losses)
 
 
 @partial(jit, static_argnames=["model"])
@@ -59,7 +59,7 @@ def get_grads_and_loss(
     model: UNet,
 ) -> Tuple[jnp.ndarray, Any]:
     def loss_fn(params: Any) -> jnp.ndarray:
-        loss, _ = get_loss(params, latents, noise_values, timesteps, model=model)
+        loss = get_loss(params, latents, noise_values, timesteps, model=model)
         return loss
 
     grad_fn = value_and_grad(loss_fn)
@@ -90,7 +90,7 @@ def get_single_val_loss(
     key: jnp.ndarray,
     model: UNet,
     alphas: jnp.ndarray,
-) -> Tuple[jnp.ndarray, np.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+) -> jnp.ndarray:
     key, key_t, key_n = jax.random.split(key, 3)
     images = reshape_images(images)
     images = normalise_images(images)
@@ -101,10 +101,7 @@ def get_single_val_loss(
         key_t,
         key_n,
     )
-    loss, model_outputs = get_loss(
-        state.params, latents, noise_values, timesteps, model=model
-    )
-    return loss, images, latents, noise_values, timesteps, model_outputs
+    return get_loss(state.params, latents, noise_values, timesteps, model=model)
 
 
 def validate(
@@ -112,47 +109,18 @@ def validate(
     state: TrainState,
     model: UNet,
     alphas: jnp.ndarray,
-    epoch: int,
-    step: int,
-    save_data: bool,
+    key: jnp.ndarray = PRNGKey(42),
 ) -> None:
     total_loss = 0
     total_samples = 0
-    key = jax.random.PRNGKey(42)
-    images_reshaped, latents, noise_values, timesteps, model_outputs = (
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
-
     for images, _ in val_generator:
         key, _ = jax.random.split(key)
-        loss, images_reshaped, latents, noise_values, timesteps, model_outputs = (
-            get_single_val_loss(images, state, key, model, alphas)
-        )
+        loss = get_single_val_loss(images, state, key, model, alphas)
         total_loss += loss
         total_samples += images.shape[0]
 
     val_loss = total_loss / total_samples
     print(f"Validation loss: {val_loss * 1e3:.3f} * 10e-3")
-
-    if save_data:
-        if any(x is None for x in [images_reshaped, latents, noise_values, timesteps]):
-            raise ValueError("Validation data were not computed correctly.")
-
-        output_path = Path(f"validation_data_epoch_{epoch}_step_{step}.pkl")
-        save_state(
-            {
-                "images": images_reshaped,
-                "latents": latents,
-                "noise_values": noise_values,
-                "timesteps": timesteps,
-                "model_outputs": model_outputs,
-            },
-            output_path,
-        )
 
 
 def execute_train_loop(
@@ -162,12 +130,11 @@ def execute_train_loop(
     model: UNet,
     epochs: int,
     expdir: Path,
-    save_val_outputs: bool,
     train_loss_every: int = -1,
     val_every: int = -1,
 ) -> TrainState:
     alphas = calculate_alphas(NUM_TIMESTEPS)
-    key = jax.random.PRNGKey(0)
+    key = PRNGKey(0)
     for epoch in range(epochs):
         print(f">>>>> Epoch {epoch} <<<<<")
         for step, (images, _) in enumerate(tqdm(train_generator)):
@@ -177,45 +144,27 @@ def execute_train_loop(
             if train_loss_every > 0 and step % train_loss_every == 0:
                 print(f"Training loss: {loss:.3f}")
             if val_every > 0 and step > 0 and step % val_every == 0:
-                validate(
-                    val_generator,
-                    state,
-                    model,
-                    alphas,
-                    epoch,
-                    step,
-                    save_val_outputs,
-                )
-        validate(
-            val_generator,
-            state,
-            model,
-            alphas,
-            epoch,
-            -1,
-            save_val_outputs,
-        )
+                validate(val_generator, state, model, alphas)
+        validate(val_generator, state, model, alphas)
         save_state(state, expdir / Path(f"model_parameters_epoch_{epoch}.pkl"))
     return state
 
 
 def main(
-    expdir: Optional[str] = None,
+    expdir: str = "",
     epochs: int = 10,
     train_loss_every: int = -1,
     val_every: int = -1,
-    save_val_outputs: bool = False,
     checkpoint_path: Optional[str] = None,
 ) -> None:
-    if expdir is None:
+    if not expdir:
         raise ValueError("Please provide an experiment directory.")
     expdir_path = Path(expdir)
     train_generator, val_generator = get_dataset(BATCH_SIZE)
     model, parameters = initialize_model()
     print(f"Model has {count_params(parameters) / 10 ** 6:.1f} M parameters.")
     if checkpoint_path is not None:
-        chk_state = load_state(Path(checkpoint_path))
-        parameters = chk_state["params"]
+        parameters = load_parameters(Path(checkpoint_path))
     state = TrainState.create(
         apply_fn=model.apply,
         params=parameters,
@@ -228,7 +177,6 @@ def main(
         model,
         epochs,
         expdir_path,
-        save_val_outputs,
         train_loss_every,
         val_every,
     )
