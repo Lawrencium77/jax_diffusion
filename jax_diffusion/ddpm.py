@@ -38,6 +38,8 @@ def run_ddpm(
     noise_schedule: jnp.ndarray,
     output_shape: Tuple[int, int, int, int],
     key: jax.Array,
+    save_images_every: int,
+    output_dir: Path,
 ) -> jnp.ndarray:
     num_timesteps = len(alphas)
     for t in tqdm(reversed(range(num_timesteps))):
@@ -55,6 +57,9 @@ def run_ddpm(
         )
 
         z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon
+        if t % save_images_every == 0:
+            save_images(z, output_dir, t)
+
     return z
 
 
@@ -64,6 +69,8 @@ def ddpm(
     num_timesteps: int,
     num_images: int,
     key: jnp.ndarray,
+    save_images_every: int,
+    output_dir: Path,
 ) -> jnp.ndarray:
     noise_schedule = get_noise_schedule(num_timesteps)
     alphas = calculate_alphas(num_timesteps)
@@ -77,39 +84,45 @@ def ddpm(
         noise_schedule,
         output_shape,
         key,
+        save_images_every,
+        output_dir,
     )
     return image
 
 
-def get_image(
+def save_images(latents: jnp.ndarray, output_dir: Path, timestep: int) -> None:
+    images = np.array(latents)
+    for i in range(images.shape[0]):
+        image = images[i].squeeze()
+        output_file = output_dir / f"image_{i}_step_{timestep}.jpg"
+        plt.imsave(output_file, image, cmap="gray")
+
+
+def generate_images(
     checkpoint_path: Path,
     num_images: int,
     key: jnp.ndarray,
+    save_images_every: int,
+    output_dir: Path,
 ) -> jnp.ndarray:
     model, params = load_model(checkpoint_path)
-    return ddpm(model, params, NUM_TIMESTEPS, num_images, key)
-
-
-def save_image_as_jpeg(
-    image_array: jnp.ndarray,
-    file_path: Path,
-    num_images: int,
-) -> None:
-    images = np.array(image_array)
-    for i in range(num_images):
-        image = images[i].squeeze()
-        output_path = file_path.with_name(f"{file_path.stem}_{i}{file_path.suffix}")
-        plt.imsave(output_path, image, cmap="gray")
+    return ddpm(
+        model, params, NUM_TIMESTEPS, num_images, key, save_images_every, output_dir
+    )
 
 
 def main(
     checkpoint: str,
-    output_path: str = "image.jpg",
     num_images: int = 1,
     key: jnp.ndarray = PRNGKey(0),
+    save_images_every: int = 50,
+    output_dir: str = "output",
 ) -> None:
-    image = get_image(Path(checkpoint), num_images, key)
-    save_image_as_jpeg(image, Path(output_path), num_images)
+    output_dir_path = Path(output_dir)
+    output_dir_path.mkdir(parents=True, exist_ok=True)
+    generate_images(
+        Path(checkpoint), num_images, key, save_images_every, output_dir_path
+    )
 
 
 if __name__ == "__main__":
