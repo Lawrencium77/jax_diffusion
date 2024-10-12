@@ -8,6 +8,7 @@ import fire
 from tqdm import tqdm
 
 from dataset import NumpyLoader, get_dataset
+from flax.core import FrozenDict
 from flax.training.train_state import TrainState
 from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
@@ -33,7 +34,7 @@ def get_optimiser(
 
 
 def get_loss(
-    params,
+    params: FrozenDict[str, Any],
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,

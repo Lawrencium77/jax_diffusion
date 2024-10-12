@@ -4,21 +4,22 @@ from typing import Any, Tuple
 import fire
 import jax
 import jax.numpy as jnp
-from matplotlib import pyplot as plt
 import numpy as np
+from matplotlib import pyplot as plt
+from flax.core import FrozenDict
 from jax.random import PRNGKey
 from tqdm import tqdm
 
 from forward_process import calculate_alphas, get_noise_schedule
 from model import UNet, initialize_model
-from utils import load_state, SPATIAL_DIM, NUM_CHANNELS
+from utils import load_parameters, SPATIAL_DIM, NUM_CHANNELS
 from train import NUM_TIMESTEPS
 
 
 def load_model(checkpoint_path: Path) -> Tuple[UNet, Any]:
-    state = load_state(checkpoint_path)
     model, _ = initialize_model()
-    return model, state["params"]
+    params = load_parameters(checkpoint_path)
+    return model, params
 
 
 def calculate_mean(
@@ -31,7 +32,7 @@ def calculate_mean(
 
 def run_ddpm(
     model: UNet,
-    params,
+    params: FrozenDict[str, Any],
     z: jnp.ndarray,
     alphas: jnp.ndarray,
     noise_schedule: jnp.ndarray,
@@ -59,7 +60,7 @@ def run_ddpm(
 
 def ddpm(
     model: UNet,
-    params,
+    params: FrozenDict[str, Any],
     num_timesteps: int,
     num_images: int,
     key: jnp.ndarray,
