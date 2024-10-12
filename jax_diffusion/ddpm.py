@@ -1,27 +1,24 @@
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Tuple
 
 import fire
 import jax
 import jax.numpy as jnp
+from matplotlib import pyplot as plt
 import numpy as np
 from jax.random import PRNGKey
-from PIL import Image
 from tqdm import tqdm
 
 from forward_process import calculate_alphas, get_noise_schedule
 from model import UNet, initialize_model
-from utils import load_state, ParamType
+from utils import load_state, SPATIAL_DIM, NUM_CHANNELS
 from train import NUM_TIMESTEPS
 
-IMAGE_SHAPE = (1, 32, 32, 1)
 
-
-def load_model(checkpoint_path: Path) -> Tuple[UNet, ParamType, ParamType]:
+def load_model(checkpoint_path: Path) -> Tuple[UNet, Any]:
     state = load_state(checkpoint_path)
-    model, _, _ = initialize_model(PRNGKey(0))
-    parameters, batch_stats = state["params"], state["batch_stats"]
-    return model, parameters, batch_stats
+    model, _ = initialize_model()
+    return model, state["params"]
 
 
 def calculate_mean(
@@ -34,76 +31,84 @@ def calculate_mean(
 
 def run_ddpm(
     model: UNet,
-    params: ParamType,
-    batch_stats: ParamType,
-    z_T: jnp.ndarray,
+    params,
+    z: jnp.ndarray,
     alphas: jnp.ndarray,
     noise_schedule: jnp.ndarray,
-    num_timesteps: int,
+    output_shape: Tuple[int, int, int, int],
     key: jax.Array,
 ) -> jnp.ndarray:
-    z = z_T
-    for t in tqdm(range(num_timesteps - 1, -1, -1)):
+    num_timesteps = len(alphas)
+    for t in tqdm(reversed(range(num_timesteps))):
         alpha = alphas[t]
         beta = noise_schedule[t]
-        timestep_array = jnp.array([t])
-        g = model.apply(
-            {"params": params, "batch_stats": batch_stats},
-            z,
-            timestep_array,
-            train=False,
-        )
+        g = model.apply({"params": params}, z, jnp.array([t]))
+        if not isinstance(g, jnp.ndarray):
+            raise ValueError("Model output is not a jnp.ndarray")
+
         key, subkey = jax.random.split(key)
-        if t > 0:
-            epsilon = jax.random.normal(subkey, IMAGE_SHAPE)
-            z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon
-        else:
-            z = calculate_mean(z, beta, alpha, g)
+        epsilon = (
+            jnp.zeros(output_shape)
+            if t == 0
+            else jax.random.normal(subkey, output_shape)
+        )
+
+        z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon
     return z
 
 
 def ddpm(
     model: UNet,
-    params: ParamType,
-    batch_stats: ParamType,
+    params,
     num_timesteps: int,
-    key: Optional[jax.Array],
+    num_images: int,
+    key: jnp.ndarray,
 ) -> jnp.ndarray:
     noise_schedule = get_noise_schedule(num_timesteps)
     alphas = calculate_alphas(num_timesteps)
-    if key is None:
-        key = jax.random.PRNGKey(0)
-    z_T = jax.random.normal(key, IMAGE_SHAPE)
+    output_shape = (num_images, SPATIAL_DIM, SPATIAL_DIM, NUM_CHANNELS)
+    z_T = jax.random.normal(key, output_shape)
     image = run_ddpm(
         model,
         params,
-        batch_stats,
         z_T,
         alphas,
         noise_schedule,
-        num_timesteps,
+        output_shape,
         key,
     )
     return image
 
 
-def get_image(checkpoint_path: Path, key: Optional[jax.Array] = None) -> jnp.ndarray:
-    model, params, batch_stats = load_model(checkpoint_path)
-    return ddpm(model, params, batch_stats, NUM_TIMESTEPS, key)
+def get_image(
+    checkpoint_path: Path,
+    num_images: int,
+    key: jnp.ndarray,
+) -> jnp.ndarray:
+    model, params = load_model(checkpoint_path)
+    return ddpm(model, params, NUM_TIMESTEPS, num_images, key)
 
 
-def save_image_as_jpeg(image_array: jnp.ndarray, file_path: str) -> None:
-    image = image_array.squeeze()
-    image_np = np.array(image)
-    image_normalised = (((image_np + 1.0) / 2.0) * 255).astype(np.uint8)
-    image_pil = Image.fromarray(image_normalised)
-    image_pil.save(file_path, format="JPEG")
+def save_image_as_jpeg(
+    image_array: jnp.ndarray,
+    file_path: Path,
+    num_images: int,
+) -> None:
+    images = np.array(image_array)
+    for i in range(num_images):
+        image = images[i].squeeze()
+        output_path = file_path.with_name(f"{file_path.stem}_{i}{file_path.suffix}")
+        plt.imsave(output_path, image, cmap="gray")
 
 
-def main(checkpoint: str, output_path: str = "generated_image.jpg") -> None:
-    checkpoint_path = Path(checkpoint)
-    image = get_image(checkpoint_path)
-    save_image_as_jpeg(image, output_path)
+def main(
+    checkpoint: str,
+    output_path: str = "image.jpg",
+    num_images: int = 1,
+    key: jnp.ndarray = PRNGKey(0),
+) -> None:
+    image = get_image(Path(checkpoint), num_images, key)
+    save_image_as_jpeg(image, Path(output_path), num_images)
 
 
 if __name__ == "__main__":

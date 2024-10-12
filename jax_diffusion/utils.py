@@ -4,36 +4,24 @@ import flax.serialization
 import jax.numpy as jnp
 import numpy as np
 
-from flax.core import FrozenDict
-from flax.training import train_state
+from flax.training.train_state import TrainState
 
-ParamType = Union[
-    FrozenDict[str, Any],
-    Dict[str, Any],
-    jnp.ndarray,
-]
+SPATIAL_DIM = 32  # dataset.py resizes from 28 x 28
+NUM_CHANNELS = 1
 
 
-class TrainState(train_state.TrainState):
-    batch_stats: Any
-
-
-def normalise_images(images):
+def normalise_images(images: np.ndarray) -> np.ndarray:
     return (images / 127.5) - 1.0
 
 
 def reshape_images(images: np.ndarray) -> np.ndarray:
-    return images.reshape(-1, 32, 32, 1)
+    return images.reshape(-1, SPATIAL_DIM, SPATIAL_DIM, NUM_CHANNELS)
 
 
-def count_params(params: ParamType) -> jnp.ndarray:
-    total = jnp.array(0)
+def count_params(params) -> int:
     if isinstance(params, jnp.ndarray):
-        total += jnp.prod(jnp.array(params.shape))
-    else:
-        for value in params.values():
-            total += count_params(value)
-    return total
+        return jnp.prod(jnp.array(params.shape)).item()
+    return sum(count_params(value) for value in params.values())
 
 
 def save_state(state: Union[TrainState, Dict[str, Any]], file_path: Path) -> None:
