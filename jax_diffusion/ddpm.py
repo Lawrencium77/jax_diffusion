@@ -42,7 +42,7 @@ def run_ddpm(
     for t in tqdm(reversed(range(num_timesteps))):
         alpha = alphas[t]
         beta = noise_schedule[t]
-        g = model.apply({"params": params}, z, jnp.array([t]), train=False)
+        g = model.apply({"params": params}, z, jnp.array([t]))
         key, subkey = jax.random.split(key)
         epsilon = (
             jnp.zeros(output_shape)
@@ -79,7 +79,7 @@ def ddpm(
 def get_image(
     checkpoint_path: Path,
     num_images: int,
-    key: jnp.ndarray = PRNGKey(0),
+    key: jnp.ndarray,
 ) -> jnp.ndarray:
     model, params = load_model(checkpoint_path)
     return ddpm(model, params, NUM_TIMESTEPS, num_images, key)
@@ -101,8 +101,9 @@ def main(
     checkpoint: str,
     output_path: str = "image.jpg",
     num_images: int = 1,
+    key: jnp.ndarray = PRNGKey(0),
 ) -> None:
-    image = get_image(Path(checkpoint), num_images)
+    image = get_image(Path(checkpoint), num_images, key)
     save_image_as_jpeg(image, Path(output_path), num_images)
 
 
