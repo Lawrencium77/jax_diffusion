@@ -45,7 +45,7 @@ def get_loss(
     """
     if train:
         model_outputs, updates = MODEL.apply(
-            {"params": params, "batch_stats": batch_stats},
+            {"params": params, "batch_stats": batch_stats},  # type: ignore
             latents,
             timesteps,
             train=train,
@@ -53,7 +53,7 @@ def get_loss(
         )
     else:
         model_outputs = MODEL.apply(
-            {"params": params, "batch_stats": batch_stats},
+            {"params": params, "batch_stats": batch_stats},  # type: ignore
             latents,
             timesteps,
             train=train,
@@ -62,7 +62,7 @@ def get_loss(
 
     losses = jnp.square(model_outputs - noise_values)
     loss = jnp.mean(losses)
-    return loss, model_outputs, updates
+    return loss, model_outputs, updates  # type: ignore
 
 
 @jit
@@ -90,15 +90,13 @@ def get_grads_and_loss(
 def train_step(
     images: jnp.ndarray,
     state: TrainState,
-    rng_key: PRNGKey,
-) -> Tuple[TrainState, jnp.ndarray, PRNGKey]:
+    rng_key: PRNGKey,  # type: ignore
+) -> Tuple[TrainState, jnp.ndarray, PRNGKey]:  # type: ignore
     rng_key, key_t, key_n = jax.random.split(rng_key, 3)
     latents, noise_values, timesteps = sample_latents(
         images, NUM_TIMESTEPS, ALPHAS, key_t, key_n
     )
-    loss, grads, updates = get_grads_and_loss(
-        state, latents, noise_values, timesteps
-    )
+    loss, grads, updates = get_grads_and_loss(state, latents, noise_values, timesteps)
     state = state.apply_gradients(grads=grads)
     state = state.replace(batch_stats=updates["batch_stats"])
     return state, loss, rng_key
@@ -108,7 +106,7 @@ def train_step(
 def get_single_val_loss(
     images: np.ndarray,
     state: TrainState,
-    rng_key: PRNGKey,
+    rng_key: PRNGKey,  # type: ignore
 ) -> Tuple[
     jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray
 ]:
@@ -116,12 +114,16 @@ def get_single_val_loss(
     images = reshape_images(images)
     images = normalise_images(images)
     latents, noise_values, timesteps = sample_latents(
-        images, NUM_TIMESTEPS, ALPHAS, key_t, key_n
+        images,  # type: ignore
+        NUM_TIMESTEPS,
+        ALPHAS,
+        key_t,
+        key_n,  # type: ignore
     )
     loss, model_outputs, _ = get_loss(
         state.params, state.batch_stats, latents, noise_values, timesteps, train=False
     )
-    return loss, images, latents, noise_values, timesteps, model_outputs
+    return loss, images, latents, noise_values, timesteps, model_outputs  # type: ignore
 
 
 def validate(
@@ -147,7 +149,7 @@ def validate(
         loss, images_reshaped, latents, noise_values, timesteps, model_outputs = (
             get_single_val_loss(images, state, rng_key)
         )
-        total_loss += loss # TODO: Does this need to be multipled by images.shape[0]?
+        total_loss += loss  # TODO: Does this need to be multipled by images.shape[0]?
         total_samples += images.shape[0]
 
     val_loss = total_loss / total_samples
@@ -188,7 +190,7 @@ def execute_train_loop(
         for step, (images, _) in enumerate(tqdm(train_generator)):
             images = reshape_images(images)
             images = normalise_images(images)
-            state, loss, rng_key = train_step(images, state, rng_key)
+            state, loss, rng_key = train_step(images, state, rng_key)  # type: ignore
             if train_loss_every > 0 and step % train_loss_every == 0:
                 print(f"Training loss: {loss:.3f}")
             if val_every > 0 and step > 0 and step % val_every == 0:
