@@ -1,3 +1,4 @@
+from functools import partial  # Import partial
 from pathlib import Path
 import jax
 import jax.numpy as jnp
@@ -10,7 +11,7 @@ from dataset import NumpyLoader, get_dataset
 from flax.training.train_state import TrainState
 from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
-from model import initialize_model
+from model import UNet, initialize_model
 from typing import Any, Optional, Tuple
 from utils import (
     count_params,
@@ -35,41 +36,35 @@ def get_loss(
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
-    train: bool,
+    model: UNet,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     MSE loss with model application.
     """
-    if train:
-        model_outputs = MODEL.apply(
-            {"params": params},  # type: ignore
-            latents,
-            timesteps,
-        )
-    else:
-        model_outputs = MODEL.apply(
-            {"params": params},  # type: ignore
-            latents,
-            timesteps,
-        )
+    model_outputs = model.apply(
+        {"params": params},  # type: ignore
+        latents,
+        timesteps,
+    )
     losses = jnp.square(model_outputs - noise_values)
     loss = jnp.mean(losses)
     return loss, model_outputs  # type: ignore
 
 
-@jit
+@partial(jit, static_argnames=["model"])
 def get_grads_and_loss(
     state: TrainState,
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
+    model: UNet,
 ) -> Tuple[jnp.ndarray, Any]:
     """
     Forward pass, backward pass, loss calculation.
     """
 
     def loss_fn(params: Any) -> jnp.ndarray:
-        loss, _ = get_loss(params, latents, noise_values, timesteps, train=True)
+        loss, _ = get_loss(params, latents, noise_values, timesteps, model=model)
         return loss
 
     grad_fn = value_and_grad(loss_fn)
@@ -81,21 +76,23 @@ def train_step(
     images: jnp.ndarray,
     state: TrainState,
     key: jnp.ndarray,
+    model: UNet,
 ) -> Tuple[TrainState, jnp.ndarray, jnp.ndarray]:
     key, key_t, key_n = jax.random.split(key, 3)
     latents, noise_values, timesteps = sample_latents(
         images, NUM_TIMESTEPS, ALPHAS, key_t, key_n
     )
-    loss, grads = get_grads_and_loss(state, latents, noise_values, timesteps)
+    loss, grads = get_grads_and_loss(state, latents, noise_values, timesteps, model)
     state = state.apply_gradients(grads=grads)
     return state, loss, key
 
 
-@jit
+@partial(jit, static_argnames=["model"])
 def get_single_val_loss(
     images: np.ndarray,
     state: TrainState,
     key: jnp.ndarray,
+    model: UNet,
 ) -> Tuple[
     jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray
 ]:
@@ -110,7 +107,7 @@ def get_single_val_loss(
         key_n,  # type: ignore
     )
     loss, model_outputs = get_loss(
-        state.params, latents, noise_values, timesteps, train=False
+        state.params, latents, noise_values, timesteps, model=model
     )
     return loss, images, latents, noise_values, timesteps, model_outputs  # type: ignore
 
@@ -118,6 +115,7 @@ def get_single_val_loss(
 def validate(
     val_generator: NumpyLoader,
     state: TrainState,
+    model: UNet,
     epoch: int,
     step: int,
     save_data: bool,
@@ -136,9 +134,9 @@ def validate(
     for images, _ in val_generator:
         key, _ = jax.random.split(key)
         loss, images_reshaped, latents, noise_values, timesteps, model_outputs = (
-            get_single_val_loss(images, state, key)
+            get_single_val_loss(images, state, key, model)
         )
-        total_loss += loss  # TODO: Does this need to be multipled by images.shape[0]?
+        total_loss += loss
         total_samples += images.shape[0]
 
     val_loss = total_loss / total_samples
@@ -165,6 +163,7 @@ def execute_train_loop(
     train_generator: NumpyLoader,
     val_generator: NumpyLoader,
     state: TrainState,
+    model: UNet,
     epochs: int,
     expdir: Path,
     save_val_outputs: bool,
@@ -179,13 +178,14 @@ def execute_train_loop(
         for step, (images, _) in enumerate(tqdm(train_generator)):
             images = reshape_images(images)
             images = normalise_images(images)
-            state, loss, key = train_step(images, state, key)  # type: ignore
+            state, loss, key = train_step(images, state, key, model)  # type: ignore
             if train_loss_every > 0 and step % train_loss_every == 0:
                 print(f"Training loss: {loss:.3f}")
             if val_every > 0 and step > 0 and step % val_every == 0:
                 validate(
                     val_generator,
                     state,
+                    model,
                     epoch,
                     step,
                     save_val_outputs,
@@ -193,6 +193,7 @@ def execute_train_loop(
         validate(
             val_generator,
             state,
+            model,
             epoch,
             -1,
             save_val_outputs,
@@ -212,15 +213,14 @@ def main(
     if expdir is None:
         raise ValueError("Please provide an experiment directory.")
     expdir_path = Path(expdir)
-    global MODEL
     train_generator, val_generator = get_dataset(BATCH_SIZE)
-    MODEL, parameters = initialize_model()
+    model, parameters = initialize_model()
     print(f"Model has {count_params(parameters) / 10 ** 6:.1f} M parameters.")
     if checkpoint_path is not None:
         chk_state = load_state(Path(checkpoint_path))
         parameters = chk_state["params"]
     state = TrainState.create(
-        apply_fn=MODEL.apply,
+        apply_fn=model.apply,
         params=parameters,
         tx=get_optimiser(),
     )
@@ -228,6 +228,7 @@ def main(
         train_generator,
         val_generator,
         state,
+        model,
         epochs,
         expdir_path,
         save_val_outputs,
