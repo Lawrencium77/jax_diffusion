@@ -2,6 +2,7 @@ from typing import Any, Optional, Tuple
 import jax.numpy as jnp
 from flax import linen as nn
 from jax import image
+from jax.random import PRNGKey
 
 from utils import SPATIAL_DIM, NUM_CHANNELS
 
@@ -179,7 +180,7 @@ class UNet(nn.Module):
 
 
 def initialize_model(
-    key: jnp.ndarray,
+    key: jnp.ndarray = PRNGKey(0),
     input_shape: Tuple[int, ...] = (1, SPATIAL_DIM, SPATIAL_DIM, NUM_CHANNELS),
     num_classes: int = 1,
 ) -> Tuple[UNet, Any]:
@@ -188,6 +189,5 @@ def initialize_model(
         key,
         jnp.ones(input_shape),
         jnp.ones(1),
-        train=True,
     )
     return model, variables["params"]

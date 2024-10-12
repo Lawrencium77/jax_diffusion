@@ -10,7 +10,6 @@ from dataset import NumpyLoader, get_dataset
 from flax.training.train_state import TrainState
 from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
-from jax.random import PRNGKey
 from model import initialize_model
 from typing import Any, Optional, Tuple
 from utils import (
@@ -215,10 +214,8 @@ def main(
     expdir_path = Path(expdir)
     global MODEL
     train_generator, val_generator = get_dataset(BATCH_SIZE)
-    MODEL, parameters = initialize_model(PRNGKey(0))
-    print(
-        f"Initialised model with {count_params(parameters) / 10 ** 6:.1f} M parameters."
-    )
+    MODEL, parameters = initialize_model()
+    print(f"Model has {count_params(parameters) / 10 ** 6:.1f} M parameters.")
     if checkpoint_path is not None:
         chk_state = load_state(Path(checkpoint_path))
         parameters = chk_state["params"]
