@@ -162,27 +162,17 @@ class UNet(nn.Module):
         self, x: jnp.ndarray, timesteps: jnp.ndarray, train: bool
     ) -> jnp.ndarray:
         # x: [bsz, SPATIAL_DIM, SPATIAL_DIM, 1]
-        x1 = DoubleConv(1, 64)(x)  # [bsz, 32, 32, 64]
+        x1 = DoubleConv(1, 64)(x)
         x2 = DownBlock(64, 128)(x1) + PositionalEncoding(128, 16)(timesteps)
-        x3 = DownBlock(128, 256)(x2) + PositionalEncoding(256, 8)(
-            timesteps
-        )  # [bsz, 8, 8, 256]
+        x3 = DownBlock(128, 256)(x2) + PositionalEncoding(256, 8)(timesteps)
         x3 = SAWrapper(256, 8)(x3)
-        x4 = DownBlock(256, 256)(x3) + PositionalEncoding(256, 4)(
-            timesteps
-        )  # [bsz, 4, 4, 256]
+        x4 = DownBlock(256, 256)(x3) + PositionalEncoding(256, 4)(timesteps)
         x4 = SAWrapper(256, 4)(x4)
-        x = UpBlock(512, 128)(x4, x3) + PositionalEncoding(128, 8)(
-            timesteps
-        )  # [bsz, 8, 8, 128]
+        x = UpBlock(512, 128)(x4, x3) + PositionalEncoding(128, 8)(timesteps)
         x = SAWrapper(128, 8)(x)
-        x = UpBlock(256, 64)(x, x2) + PositionalEncoding(64, 16)(
-            timesteps
-        )  # [bsz, 16, 16, 64]
-        x = UpBlock(128, 64)(x, x1) + PositionalEncoding(64, 32)(
-            timesteps
-        )  # [bsz, 32, 32, 64]
-        output = OutConv(64, 1)(x)  # [bsz, 32, 32, 1]
+        x = UpBlock(256, 64)(x, x2) + PositionalEncoding(64, 16)(timesteps)
+        x = UpBlock(128, 64)(x, x1) + PositionalEncoding(64, 32)(timesteps)
+        output = OutConv(64, 1)(x)
         return output
 
 
