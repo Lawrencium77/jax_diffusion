@@ -10,7 +10,7 @@ SPATIAL_DIM = 32  # dataset.py resizes from 28 x 28
 NUM_CHANNELS = 1
 
 
-def normalise_images(images):
+def normalise_images(images: np.ndarray) -> np.ndarray:
     return (images / 127.5) - 1.0
 
 
