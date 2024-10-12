@@ -18,14 +18,10 @@ def reshape_images(images: np.ndarray) -> np.ndarray:
     return images.reshape(-1, SPATIAL_DIM, SPATIAL_DIM, NUM_CHANNELS)
 
 
-def count_params(params) -> jnp.ndarray:
-    total = jnp.array(0)
+def count_params(params) -> int:
     if isinstance(params, jnp.ndarray):
-        total += jnp.prod(jnp.array(params.shape))
-    else:
-        for value in params.values():
-            total += count_params(value)
-    return total
+        return jnp.prod(jnp.array(params.shape))  # type: ignore
+    return sum(count_params(value) for value in params.values())
 
 
 def save_state(state: Union[TrainState, Dict[str, Any]], file_path: Path) -> None:
