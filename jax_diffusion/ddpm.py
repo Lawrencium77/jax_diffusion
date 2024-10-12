@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, Tuple
 
 import fire
 import jax
@@ -15,11 +15,10 @@ from utils import load_state, SPATIAL_DIM, NUM_CHANNELS
 from train import NUM_TIMESTEPS
 
 
-def load_model(checkpoint_path: Path) -> Tuple[UNet, Any, Any]:
+def load_model(checkpoint_path: Path) -> Tuple[UNet, Any]:
     state = load_state(checkpoint_path)
-    model, _, _ = initialize_model(PRNGKey(0))
-    parameters, batch_stats = state["params"], state["batch_stats"]
-    return model, parameters, batch_stats
+    model, _ = initialize_model()
+    return model, state["params"]
 
 
 def calculate_mean(
@@ -33,56 +32,44 @@ def calculate_mean(
 def run_ddpm(
     model: UNet,
     params,
-    batch_stats,
-    z_T: jnp.ndarray,
+    z: jnp.ndarray,
     alphas: jnp.ndarray,
     noise_schedule: jnp.ndarray,
-    num_timesteps: int,
     output_shape: Tuple[int, int, int, int],
     key: jax.Array,
 ) -> jnp.ndarray:
-    z = z_T
-    for t in tqdm(range(num_timesteps - 1, -1, -1)):
+    num_timesteps = len(alphas)
+    for t in tqdm(reversed(range(num_timesteps))):
         alpha = alphas[t]
         beta = noise_schedule[t]
-        timestep_array = jnp.array([t])
-        g = model.apply(
-            {"params": params, "batch_stats": batch_stats},  # type: ignore
-            z,
-            timestep_array,
-            train=False,
-        )
+        g = model.apply({"params": params}, z, jnp.array([t]), train=False)
         key, subkey = jax.random.split(key)
-        if t > 0:
-            epsilon = jax.random.normal(subkey, output_shape)
-            z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon  # type: ignore
-        else:
-            z = calculate_mean(z, beta, alpha, g)  # type: ignore
+        epsilon = (
+            jnp.zeros(output_shape)
+            if t == 0
+            else jax.random.normal(subkey, output_shape)
+        )
+        z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon  # type: ignore
     return z
 
 
 def ddpm(
     model: UNet,
     params,
-    batch_stats,
     num_timesteps: int,
     num_images: int,
-    key: Optional[jax.Array],
+    key: jnp.ndarray,
 ) -> jnp.ndarray:
     noise_schedule = get_noise_schedule(num_timesteps)
     alphas = calculate_alphas(num_timesteps)
-    if key is None:
-        key = jax.random.PRNGKey(0)
     output_shape = (num_images, SPATIAL_DIM, SPATIAL_DIM, NUM_CHANNELS)
     z_T = jax.random.normal(key, output_shape)
     image = run_ddpm(
         model,
         params,
-        batch_stats,
         z_T,
         alphas,
         noise_schedule,
-        num_timesteps,
         output_shape,
         key,
     )
@@ -92,10 +79,10 @@ def ddpm(
 def get_image(
     checkpoint_path: Path,
     num_images: int,
-    key: Optional[jax.Array] = None,
+    key: jnp.ndarray = PRNGKey(0),
 ) -> jnp.ndarray:
-    model, params, batch_stats = load_model(checkpoint_path)
-    return ddpm(model, params, batch_stats, NUM_TIMESTEPS, num_images, key)
+    model, params = load_model(checkpoint_path)
+    return ddpm(model, params, NUM_TIMESTEPS, num_images, key)
 
 
 def save_image_as_jpeg(
@@ -103,14 +90,11 @@ def save_image_as_jpeg(
     file_path: Path,
     num_images: int,
 ) -> None:
+    images = np.array(image_array)
     for i in range(num_images):
-        image = image_array[i]
-        image = np.array(image)
-        image = image.squeeze()
-        output_path = file_path.with_name(file_path.stem + f"_{i}" + file_path.suffix)
-        plt.imshow(image, cmap="gray")
-        plt.axis("off")
-        plt.savefig(output_path)
+        image = images[i].squeeze()
+        output_path = file_path.with_name(f"{file_path.stem}_{i}{file_path.suffix}")
+        plt.imsave(output_path, image, cmap="gray")
 
 
 def main(
