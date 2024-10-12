@@ -4,17 +4,15 @@ from typing import Optional, Tuple
 import fire
 import jax
 import jax.numpy as jnp
+from matplotlib import pyplot as plt
 import numpy as np
 from jax.random import PRNGKey
-from PIL import Image
 from tqdm import tqdm
 
 from forward_process import calculate_alphas, get_noise_schedule
 from model import UNet, initialize_model
-from utils import load_state, ParamType
+from utils import load_state, ParamType, SPATIAL_DIM, NUM_CHANNELS
 from train import NUM_TIMESTEPS
-
-IMAGE_SHAPE = (1, 32, 32, 1)
 
 
 def load_model(checkpoint_path: Path) -> Tuple[UNet, ParamType, ParamType]:
@@ -40,6 +38,7 @@ def run_ddpm(
     alphas: jnp.ndarray,
     noise_schedule: jnp.ndarray,
     num_timesteps: int,
+    output_shape: Tuple[int, int, int, int],
     key: jax.Array,
 ) -> jnp.ndarray:
     z = z_T
@@ -48,17 +47,17 @@ def run_ddpm(
         beta = noise_schedule[t]
         timestep_array = jnp.array([t])
         g = model.apply(
-            {"params": params, "batch_stats": batch_stats},
+            {"params": params, "batch_stats": batch_stats},  # type: ignore
             z,
             timestep_array,
             train=False,
         )
         key, subkey = jax.random.split(key)
         if t > 0:
-            epsilon = jax.random.normal(subkey, IMAGE_SHAPE)
-            z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon
+            epsilon = jax.random.normal(subkey, output_shape)
+            z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon  # type: ignore
         else:
-            z = calculate_mean(z, beta, alpha, g)
+            z = calculate_mean(z, beta, alpha, g)  # type: ignore
     return z
 
 
@@ -67,13 +66,15 @@ def ddpm(
     params: ParamType,
     batch_stats: ParamType,
     num_timesteps: int,
+    num_images: int,
     key: Optional[jax.Array],
 ) -> jnp.ndarray:
     noise_schedule = get_noise_schedule(num_timesteps)
     alphas = calculate_alphas(num_timesteps)
     if key is None:
         key = jax.random.PRNGKey(0)
-    z_T = jax.random.normal(key, IMAGE_SHAPE)
+    output_shape = (num_images, SPATIAL_DIM, SPATIAL_DIM, NUM_CHANNELS)
+    z_T = jax.random.normal(key, output_shape)
     image = run_ddpm(
         model,
         params,
@@ -82,28 +83,43 @@ def ddpm(
         alphas,
         noise_schedule,
         num_timesteps,
+        output_shape,
         key,
     )
     return image
 
 
-def get_image(checkpoint_path: Path, key: Optional[jax.Array] = None) -> jnp.ndarray:
+def get_image(
+    checkpoint_path: Path,
+    num_images: int,
+    key: Optional[jax.Array] = None,
+) -> jnp.ndarray:
     model, params, batch_stats = load_model(checkpoint_path)
-    return ddpm(model, params, batch_stats, NUM_TIMESTEPS, key)
+    return ddpm(model, params, batch_stats, NUM_TIMESTEPS, num_images, key)
 
 
-def save_image_as_jpeg(image_array: jnp.ndarray, file_path: str) -> None:
-    image = image_array.squeeze()
-    image_np = np.array(image)
-    image_normalised = (((image_np + 1.0) / 2.0) * 255).astype(np.uint8)
-    image_pil = Image.fromarray(image_normalised)
-    image_pil.save(file_path, format="JPEG")
+def save_image_as_jpeg(
+    image_array: jnp.ndarray,
+    file_path: Path,
+    num_images: int,
+) -> None:
+    for i in range(num_images):
+        image = image_array[i]
+        image = np.array(image)
+        image = image.squeeze()
+        output_path = file_path.with_name(file_path.stem + f"_{i}" + file_path.suffix)
+        plt.imshow(image, cmap="gray")
+        plt.axis("off")
+        plt.savefig(output_path)
 
 
-def main(checkpoint: str, output_path: str = "generated_image.jpg") -> None:
-    checkpoint_path = Path(checkpoint)
-    image = get_image(checkpoint_path)
-    save_image_as_jpeg(image, output_path)
+def main(
+    checkpoint: str,
+    output_path: str = "image.jpg",
+    num_images: int = 1,
+) -> None:
+    image = get_image(Path(checkpoint), num_images)
+    save_image_as_jpeg(image, Path(output_path), num_images)
 
 
 if __name__ == "__main__":

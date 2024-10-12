@@ -13,6 +13,9 @@ ParamType = Union[
     jnp.ndarray,
 ]
 
+SPATIAL_DIM = 32  # dataset.py resizes from 28 x 28
+NUM_CHANNELS = 1
+
 
 class TrainState(train_state.TrainState):
     batch_stats: Any
@@ -23,7 +26,7 @@ def normalise_images(images):
 
 
 def reshape_images(images: np.ndarray) -> np.ndarray:
-    return images.reshape(-1, 32, 32, 1)
+    return images.reshape(-1, SPATIAL_DIM, SPATIAL_DIM, NUM_CHANNELS)
 
 
 def count_params(params: ParamType) -> jnp.ndarray:
