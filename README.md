@@ -1,28 +1,28 @@
 # JAX Diffusion
 
-This is a toy project that implements a [Denoising Diffusion Probabilistic Model (DDPM)](https://arxiv.org/pdf/2006.11239) in JAX, using the MNIST dataset.
+This is a toy project that implements a [Denoising Diffusion Probabilistic Model (DDPM)](https://arxiv.org/pdf/2006.11239) in JAX, using MNIST.
 
 ## Setup
 
-Getting JAX running with the Metal backend (for macOS) can be a bit challenging. The `requirements.txt` file is tailored to my setup, so you may need to adjust the dependencies to suit your environment. I suggest unpinning the dependencies in `requirements.txt` to start with.
+Getting JAX running with the Metal backend can be a bit challenging. The `requirements.txt` file is tailored to my setup, so you may need to adjust the dependencies to suit your environment. I suggest unpinning them to start with.
 
 ## Commands
 
 For model training:
 
 ```bash
-python3 train.py --expdir $EXPDIR --epochs 20 
+python3 jax_diffusion/train.py --expdir $EXPDIR --epochs $NUM_EPOCHS 
 ```
 
 To run inference:
 
 ```bash
-python3 ddpm.py --checkpoint $CHECKPOINT_PATH --num_images $NUM_IMAGES
+python3 jax_diffusion/ddpm.py --checkpoint $CHECKPOINT_PATH --num_images $NUM_IMAGES
 ```
 
 ## Example Generations
 
-After around 15 epochs of training on an Apple M2 (which takes a few hours), the model begins generating fairly convincing samples:
+After around 15 epochs of training on an Apple M2 (which takes a few hours), the model generates convincing samples:
 
 ![](/assets/output_3.jpg)
 ![](/assets/output_4.jpg)
