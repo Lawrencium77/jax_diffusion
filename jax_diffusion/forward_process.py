@@ -6,7 +6,6 @@ from typing import Tuple
 
 import jax
 import jax.numpy as jnp
-from jax.random import PRNGKey
 
 MIN_NOISE = 1e-4
 MAX_NOISE = 0.02
@@ -29,20 +28,15 @@ def sample_latents(
     images: jnp.ndarray,
     num_timesteps: int,
     alphas: jnp.ndarray,
-    key_t: PRNGKey,
-    key_n: PRNGKey,
+    key_t: jnp.ndarray,
+    key_n: jnp.ndarray,
 ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """
     Sample from forward process.
     """
     batch_size = images.shape[0]
-    timesteps = jax.random.randint(
-        key_t, (batch_size,), 0, num_timesteps
-    )
-    sampled_alphas = alphas[timesteps].reshape(batch_size, 1, 1, 1)
+    timesteps = jax.random.randint(key_t, (batch_size,), 0, num_timesteps)
+    sampled_alphas = alphas[timesteps][:, None, None, None]  # Reshapes in one line
     noise = jax.random.normal(key_n, images.shape)
-    latents = (
-        jnp.sqrt(sampled_alphas) * images
-        + jnp.sqrt(1 - sampled_alphas) * noise
-    )
+    latents = jnp.sqrt(sampled_alphas) * images + jnp.sqrt(1 - sampled_alphas) * noise
     return latents, noise, timesteps
