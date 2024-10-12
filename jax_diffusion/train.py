@@ -77,10 +77,11 @@ def train_step(
     state: TrainState,
     key: jnp.ndarray,
     model: UNet,
+    alphas: jnp.ndarray,
 ) -> Tuple[TrainState, jnp.ndarray, jnp.ndarray]:
     key, key_t, key_n = jax.random.split(key, 3)
     latents, noise_values, timesteps = sample_latents(
-        images, NUM_TIMESTEPS, ALPHAS, key_t, key_n
+        images, NUM_TIMESTEPS, alphas, key_t, key_n
     )
     loss, grads = get_grads_and_loss(state, latents, noise_values, timesteps, model)
     state = state.apply_gradients(grads=grads)
@@ -93,6 +94,7 @@ def get_single_val_loss(
     state: TrainState,
     key: jnp.ndarray,
     model: UNet,
+    alphas: jnp.ndarray,
 ) -> Tuple[
     jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray
 ]:
@@ -102,7 +104,7 @@ def get_single_val_loss(
     latents, noise_values, timesteps = sample_latents(
         images,  # type: ignore
         NUM_TIMESTEPS,
-        ALPHAS,
+        alphas,
         key_t,
         key_n,  # type: ignore
     )
@@ -116,6 +118,7 @@ def validate(
     val_generator: NumpyLoader,
     state: TrainState,
     model: UNet,
+    alphas: jnp.ndarray,
     epoch: int,
     step: int,
     save_data: bool,
@@ -134,7 +137,7 @@ def validate(
     for images, _ in val_generator:
         key, _ = jax.random.split(key)
         loss, images_reshaped, latents, noise_values, timesteps, model_outputs = (
-            get_single_val_loss(images, state, key, model)
+            get_single_val_loss(images, state, key, model, alphas)
         )
         total_loss += loss
         total_samples += images.shape[0]
@@ -170,15 +173,14 @@ def execute_train_loop(
     train_loss_every: int = -1,
     val_every: int = -1,
 ) -> TrainState:
-    global ALPHAS
-    ALPHAS = calculate_alphas(NUM_TIMESTEPS)
+    alphas = calculate_alphas(NUM_TIMESTEPS)
     key = jax.random.PRNGKey(0)
     for epoch in range(epochs):
         print(f">>>>> Epoch {epoch} <<<<<")
         for step, (images, _) in enumerate(tqdm(train_generator)):
             images = reshape_images(images)
             images = normalise_images(images)
-            state, loss, key = train_step(images, state, key, model)  # type: ignore
+            state, loss, key = train_step(images, state, key, model, alphas)  # type: ignore
             if train_loss_every > 0 and step % train_loss_every == 0:
                 print(f"Training loss: {loss:.3f}")
             if val_every > 0 and step > 0 and step % val_every == 0:
@@ -186,6 +188,7 @@ def execute_train_loop(
                     val_generator,
                     state,
                     model,
+                    alphas,
                     epoch,
                     step,
                     save_val_outputs,
@@ -194,6 +197,7 @@ def execute_train_loop(
             val_generator,
             state,
             model,
+            alphas,
             epoch,
             -1,
             save_val_outputs,
