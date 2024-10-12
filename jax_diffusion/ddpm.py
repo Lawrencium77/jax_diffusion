@@ -114,14 +114,14 @@ def generate_images(
 def main(
     checkpoint: str,
     num_images: int = 1,
-    key: jnp.ndarray = PRNGKey(0),
+    key: int = 0,
     save_images_every: int = 50,
     output_dir: str = "output",
 ) -> None:
     output_dir_path = Path(output_dir)
     output_dir_path.mkdir(parents=True, exist_ok=True)
     generate_images(
-        Path(checkpoint), num_images, key, save_images_every, output_dir_path
+        Path(checkpoint), num_images, PRNGKey(key), save_images_every, output_dir_path
     )
 
 
