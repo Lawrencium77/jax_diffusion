@@ -192,7 +192,7 @@ def initialize_model(
     key: Array,
     input_shape: Tuple[int, ...] = (1, SPATIAL_DIM, SPATIAL_DIM, NUM_CHANNELS),
     num_classes: int = 1,
-) -> Tuple[UNet, Any, Any]:
+) -> Tuple[UNet, Any]:
     model = UNet(out_channels=num_classes)
     variables = model.init(
         key,
@@ -200,4 +200,4 @@ def initialize_model(
         jnp.ones(1),
         train=True,
     )
-    return model, variables["params"], {}
+    return model, variables["params"]

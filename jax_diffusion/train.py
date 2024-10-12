@@ -7,13 +7,13 @@ import fire
 from tqdm import tqdm
 
 from dataset import NumpyLoader, get_dataset
+from flax.training.train_state import TrainState
 from forward_process import sample_latents, calculate_alphas
 from jax import value_and_grad, jit
 from jax.random import PRNGKey
 from model import initialize_model
 from typing import Any, Optional, Tuple
 from utils import (
-    TrainState,
     count_params,
     load_state,
     normalise_images,
@@ -33,35 +33,31 @@ def get_optimiser(
 
 def get_loss(
     params,
-    batch_stats,
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
     train: bool,
-) -> Tuple[jnp.ndarray, jnp.ndarray, Optional[Any]]:
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     MSE loss with model application.
     """
     if train:
-        model_outputs, updates = MODEL.apply(
-            {"params": params, "batch_stats": batch_stats},  # type: ignore
+        model_outputs = MODEL.apply(
+            {"params": params},  # type: ignore
             latents,
             timesteps,
             train=train,
-            mutable=["batch_stats"],
         )
     else:
         model_outputs = MODEL.apply(
-            {"params": params, "batch_stats": batch_stats},  # type: ignore
+            {"params": params},  # type: ignore
             latents,
             timesteps,
             train=train,
         )
-        updates = None
-
     losses = jnp.square(model_outputs - noise_values)
     loss = jnp.mean(losses)
-    return loss, model_outputs, updates  # type: ignore
+    return loss, model_outputs  # type: ignore
 
 
 @jit
@@ -70,20 +66,18 @@ def get_grads_and_loss(
     latents: jnp.ndarray,
     noise_values: jnp.ndarray,
     timesteps: jnp.ndarray,
-) -> Tuple[jnp.ndarray, Any, Optional[Any]]:
+) -> Tuple[jnp.ndarray, Any]:
     """
     Forward pass, backward pass, loss calculation.
     """
 
-    def loss_fn(params: Any) -> Tuple[jnp.ndarray, Optional[Any]]:
-        loss, _, updates = get_loss(
-            params, state.batch_stats, latents, noise_values, timesteps, train=True
-        )
-        return loss, updates
+    def loss_fn(params: Any) -> jnp.ndarray:
+        loss, _ = get_loss(params, latents, noise_values, timesteps, train=True)
+        return loss
 
-    grad_fn = value_and_grad(loss_fn, has_aux=True)
-    (loss, updates), grads = grad_fn(state.params)
-    return loss, grads, updates
+    grad_fn = value_and_grad(loss_fn)
+    loss, grads = grad_fn(state.params)
+    return loss, grads
 
 
 def train_step(
@@ -95,9 +89,8 @@ def train_step(
     latents, noise_values, timesteps = sample_latents(
         images, NUM_TIMESTEPS, ALPHAS, key_t, key_n
     )
-    loss, grads, updates = get_grads_and_loss(state, latents, noise_values, timesteps)
+    loss, grads = get_grads_and_loss(state, latents, noise_values, timesteps)
     state = state.apply_gradients(grads=grads)
-    state = state.replace(batch_stats=updates["batch_stats"])
     return state, loss, rng_key
 
 
@@ -119,8 +112,8 @@ def get_single_val_loss(
         key_t,
         key_n,  # type: ignore
     )
-    loss, model_outputs, _ = get_loss(
-        state.params, state.batch_stats, latents, noise_values, timesteps, train=False
+    loss, model_outputs = get_loss(
+        state.params, latents, noise_values, timesteps, train=False
     )
     return loss, images, latents, noise_values, timesteps, model_outputs  # type: ignore
 
@@ -224,18 +217,17 @@ def main(
     expdir_path = Path(expdir)
     global MODEL
     train_generator, val_generator = get_dataset(BATCH_SIZE)
-    MODEL, parameters, batch_stats = initialize_model(PRNGKey(0))
+    MODEL, parameters = initialize_model(PRNGKey(0))
     print(
         f"Initialised model with {count_params(parameters) / 10 ** 6:.1f} M parameters."
     )
     if checkpoint_path is not None:
         chk_state = load_state(Path(checkpoint_path))
-        parameters, batch_stats = chk_state["params"], chk_state["batch_stats"]
+        parameters = chk_state["params"]
     state = TrainState.create(
         apply_fn=MODEL.apply,
         params=parameters,
         tx=get_optimiser(),
-        batch_stats=batch_stats,
     )
     state = execute_train_loop(
         train_generator,

@@ -4,14 +4,10 @@ import flax.serialization
 import jax.numpy as jnp
 import numpy as np
 
-from flax.training import train_state
+from flax.training.train_state import TrainState
 
 SPATIAL_DIM = 32  # dataset.py resizes from 28 x 28
 NUM_CHANNELS = 1
-
-
-class TrainState(train_state.TrainState):
-    batch_stats: Any
 
 
 def normalise_images(images):
