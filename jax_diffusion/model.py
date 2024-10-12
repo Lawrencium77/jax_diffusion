@@ -1,3 +1,8 @@
+"""
+This model is a U-Net with self-attention layers. It's inspired by
+https://github.com/awjuliani/pytorch-diffusion/blob/master/model.py
+"""
+
 from typing import Any, Optional, Tuple
 import jax.numpy as jnp
 from flax import linen as nn
