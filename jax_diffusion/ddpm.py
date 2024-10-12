@@ -43,13 +43,17 @@ def run_ddpm(
         alpha = alphas[t]
         beta = noise_schedule[t]
         g = model.apply({"params": params}, z, jnp.array([t]))
+        if not isinstance(g, jnp.ndarray):
+            raise ValueError("Model output is not a jnp.ndarray")
+
         key, subkey = jax.random.split(key)
         epsilon = (
             jnp.zeros(output_shape)
             if t == 0
             else jax.random.normal(subkey, output_shape)
         )
-        z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon  # type: ignore
+
+        z = calculate_mean(z, beta, alpha, g) + beta**0.5 * epsilon
     return z
 
 

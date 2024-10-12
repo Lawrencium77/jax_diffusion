@@ -39,13 +39,15 @@ def get_loss(
     model: UNet,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     model_outputs = model.apply(
-        {"params": params},  # type: ignore
+        {"params": params},
         latents,
         timesteps,
     )
+    if not isinstance(model_outputs, jnp.ndarray):
+        raise ValueError("Model output is not a jnp.ndarray")
     losses = jnp.square(model_outputs - noise_values)
     loss = jnp.mean(losses)
-    return loss, model_outputs  # type: ignore
+    return loss, model_outputs
 
 
 @partial(jit, static_argnames=["model"])
@@ -88,9 +90,7 @@ def get_single_val_loss(
     key: jnp.ndarray,
     model: UNet,
     alphas: jnp.ndarray,
-) -> Tuple[
-    jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray
-]:
+) -> Tuple[jnp.ndarray, np.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     key, key_t, key_n = jax.random.split(key, 3)
     images = reshape_images(images)
     images = normalise_images(images)
@@ -99,12 +99,12 @@ def get_single_val_loss(
         NUM_TIMESTEPS,
         alphas,
         key_t,
-        key_n,  # type: ignore
+        key_n,
     )
     loss, model_outputs = get_loss(
         state.params, latents, noise_values, timesteps, model=model
     )
-    return loss, images, latents, noise_values, timesteps, model_outputs  # type: ignore
+    return loss, images, latents, noise_values, timesteps, model_outputs
 
 
 def validate(

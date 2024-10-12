@@ -20,7 +20,7 @@ def reshape_images(images: np.ndarray) -> np.ndarray:
 
 def count_params(params) -> int:
     if isinstance(params, jnp.ndarray):
-        return jnp.prod(jnp.array(params.shape))  # type: ignore
+        return jnp.prod(jnp.array(params.shape)).item()
     return sum(count_params(value) for value in params.values())
 
 
