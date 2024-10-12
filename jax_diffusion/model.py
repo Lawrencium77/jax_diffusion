@@ -1,7 +1,7 @@
 from typing import Any, Optional, Tuple
 import jax.numpy as jnp
 from flax import linen as nn
-from jax import Array, image
+from jax import image
 
 from utils import SPATIAL_DIM, NUM_CHANNELS
 
@@ -159,7 +159,9 @@ class UNet(nn.Module):
 
     @nn.compact
     def __call__(
-        self, x: jnp.ndarray, timesteps: jnp.ndarray, train: bool
+        self,
+        x: jnp.ndarray,
+        timesteps: jnp.ndarray,
     ) -> jnp.ndarray:
         # x: [bsz, SPATIAL_DIM, SPATIAL_DIM, 1]
         x1 = DoubleConv(1, 64)(x)
@@ -177,7 +179,7 @@ class UNet(nn.Module):
 
 
 def initialize_model(
-    key: Array,
+    key: jnp.ndarray,
     input_shape: Tuple[int, ...] = (1, SPATIAL_DIM, SPATIAL_DIM, NUM_CHANNELS),
     num_classes: int = 1,
 ) -> Tuple[UNet, Any]:
