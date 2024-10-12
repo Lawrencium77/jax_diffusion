@@ -38,9 +38,6 @@ def get_loss(
     timesteps: jnp.ndarray,
     model: UNet,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """
-    MSE loss with model application.
-    """
     model_outputs = model.apply(
         {"params": params},  # type: ignore
         latents,
@@ -59,10 +56,6 @@ def get_grads_and_loss(
     timesteps: jnp.ndarray,
     model: UNet,
 ) -> Tuple[jnp.ndarray, Any]:
-    """
-    Forward pass, backward pass, loss calculation.
-    """
-
     def loss_fn(params: Any) -> jnp.ndarray:
         loss, _ = get_loss(params, latents, noise_values, timesteps, model=model)
         return loss
@@ -73,7 +66,7 @@ def get_grads_and_loss(
 
 
 def train_step(
-    images: jnp.ndarray,
+    images: np.ndarray,
     state: TrainState,
     key: jnp.ndarray,
     model: UNet,
@@ -102,7 +95,7 @@ def get_single_val_loss(
     images = reshape_images(images)
     images = normalise_images(images)
     latents, noise_values, timesteps = sample_latents(
-        images,  # type: ignore
+        images,
         NUM_TIMESTEPS,
         alphas,
         key_t,
@@ -180,7 +173,7 @@ def execute_train_loop(
         for step, (images, _) in enumerate(tqdm(train_generator)):
             images = reshape_images(images)
             images = normalise_images(images)
-            state, loss, key = train_step(images, state, key, model, alphas)  # type: ignore
+            state, loss, key = train_step(images, state, key, model, alphas)
             if train_loss_every > 0 and step % train_loss_every == 0:
                 print(f"Training loss: {loss:.3f}")
             if val_every > 0 and step > 0 and step % val_every == 0:

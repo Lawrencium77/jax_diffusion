@@ -2,10 +2,11 @@
 Various functions for the forward and reverse diffusion processes.
 """
 
-from typing import Tuple
+from typing import Tuple, Union
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 MIN_NOISE = 1e-4
 MAX_NOISE = 0.02
@@ -25,7 +26,7 @@ def calculate_alphas(num_timesteps: int) -> jnp.ndarray:
 
 
 def sample_latents(
-    images: jnp.ndarray,
+    images: Union[np.ndarray, jnp.ndarray],
     num_timesteps: int,
     alphas: jnp.ndarray,
     key_t: jnp.ndarray,
